@@ -1,0 +1,8 @@
+praisonaiagents
+praisonai-tools
+chromadb
+praisonai[llm]
+yfinance
+duckdb
+beautifulsoup4
+requests
