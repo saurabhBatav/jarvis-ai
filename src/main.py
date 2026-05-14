@@ -16,6 +16,7 @@ load_dotenv(env_path, override=True)  # override shell env vars
 
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
+from src.agents.domain.news_summary import NewsSummaryAgent
 from src.memory import MemoryManager
 
 
@@ -38,6 +39,7 @@ class Jarvis:
         self.worklife = WorkLifeAgent()
         self.health = HealthAgent()
         self.search = SearchAgent()
+        self.news_summary = NewsSummaryAgent()
         
         # Memory
         self.memory = MemoryManager()
@@ -47,7 +49,12 @@ class Jarvis:
     
     def route_task(self, message: str) -> str:
         """Route message to appropriate agent"""
-        msg_lower = message.lower()
+        # Extract the actual user message (before Context: prefix)
+        if "\n\nContext:" in message:
+            actual_message = message.split("\n\nContext:")[0]
+            msg_lower = actual_message.lower()
+        else:
+            msg_lower = message.lower()
         
         # URL detection FIRST - fetch web pages
         if 'http://' in message or 'https://' in message:
@@ -56,6 +63,10 @@ class Jarvis:
         # Search keywords FIRST (before news/other)
         if any(k in msg_lower for k in ['search', 'find', 'look up', 'google', 'web']):
             return self._handle_search(message)
+        
+        # News Summary keywords - BEFORE general news
+        if any(k in msg_lower for k in ['news summary', 'news slides', 'create presentation', '10 slides', 'news presentation', 'summarize news']):
+            return self._handle_news_summary(message)
         
         # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
         remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
@@ -173,6 +184,46 @@ class Jarvis:
             return self.health.summary()
         else:
             return self.health.quick_tip()
+    
+    def _handle_news_summary(self, message: str) -> str:
+        """Handle news summary and presentation requests"""
+        import re
+        msg_lower = message.lower()
+        
+        # Extract topic from message
+        # Patterns like "news summary about X" or "news slides for X"
+        topic = "technology"  # default
+        
+        # Try to extract topic
+        patterns = [
+            r'news\s+(?:summary|slides)\s+(?:about|for|on)?\s*(\w+)',
+            r'create\s+(?:news|presentation)\s+(?:about|for)?\s*(\w+)',
+            r'summarize\s+(?:news|about)\s*(\w+)',
+            r'(\w+)\s+news\s+(?:summary|slides)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, msg_lower)
+            if match:
+                topic = match.group(1)
+                break
+        
+        # Remove trigger words to get the topic
+        for word in ['news summary', 'news slides', 'create presentation', 'summarize', 'about', 'for']:
+            if word in msg_lower:
+                topic = msg_lower.split(word)[-1].strip()
+                break
+        
+        # Run the news summary agent
+        result = self.news_summary.run(topic, "news_summary.md")
+        
+        # Read the generated file
+        try:
+            with open("news_summary.md", "r") as f:
+                content = f.read()
+            return f"📰 Generated 10-slide news summary for '{topic}':\n\n{content[:1500]}...\n\nSaved to: news_summary.md"
+        except:
+            return result
     
     def _handle_search(self, message: str) -> str:
         # Check if it's a URL
