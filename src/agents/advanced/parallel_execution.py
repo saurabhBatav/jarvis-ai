@@ -133,18 +133,52 @@ Respond with comma-separated roles:""", max_tokens=100)
         # Execute in parallel
         results = self.execute_parallel(task, roles)
         
-        # Format detailed output
-        output = f"\n{'='*50}"
+        # Format detailed output - show summary with expand option
+        output = f"\n{'='*60}"
         output += f"\n⚡ PARALLEL EXECUTION RESULTS ({len(roles)} agents)"
-        output += f"\n{'='*50}\n\n"
+        output += f"\n{'='*60}\n"
         
         for role, data in results.items():
-            output += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            output += f"🤖 **{data['role'].upper()}** (completed in {data.get('time', 0):.2f}s)\n"
-            output += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            output += f"{data['result']}\n\n"
+            preview = data['result'][:300] if len(data['result']) > 300 else data['result']
+            full_len = len(data['result'])
+            
+            output += f"\n┌────────────────────────────────────────────────────┐"
+            output += f"\n│ 🤖 **{data['role'].upper()}** ({data.get('time', 0):.2f}s) | {full_len} chars"
+            output += f"\n├────────────────────────────────────────────────────┤"
+            output += f"\n│ {preview}"
+            if full_len > 300:
+                output += f"\n│ ... [{full_len - 300} more chars]"
+            output += f"\n│"
+            output += f"\n│ 💡 Say 'expand {data['role']}' to see full output"
+            output += f"\n└────────────────────────────────────────────────────┘\n"
+        
+        # Store full results for later retrieval
+        self._last_results = results
+        output += f"\n📋 Type 'expand' or 'expand <agent_name>' to see full output\n"
         
         return output
+    
+    def expand(self, agent_name: str = None) -> str:
+        """Expand full output for an agent"""
+        if not hasattr(self, '_last_results') or not self._last_results:
+            return "No previous results to expand. Run a parallel task first."
+        
+        if not agent_name:
+            # Show all
+            output = "\n📋 FULL PARALLEL RESULTS:\n"
+            for role, data in self._last_results.items():
+                output += f"\n{'='*60}\n"
+                output += f"🤖 **{data['role'].upper()}**\n"
+                output += f"{'='*60}\n"
+                output += f"{data['result']}\n"
+            return output
+        
+        # Find specific agent
+        for role, data in self._last_results.items():
+            if agent_name.lower() in role.lower():
+                return f"\n🤖 **{data['role'].upper()}** ({data.get('time', 0):.2f}s)\n\n{data['result']}"
+        
+        return f"Agent '{agent_name}' not found. Available: {', '.join(self._last_results.keys())}"
 
 
 def main():

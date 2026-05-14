@@ -224,7 +224,12 @@ class Jarvis:
         if any(k in msg_lower for k in ['parallel', 'simultaneously', 'at the same time']):
             logger.pattern("Detected: Parallel Execution pattern")
             from src.agents.advanced.parallel_execution import ParallelAgents
-            return ParallelAgents().process(message)
+            pa = ParallelAgents()
+            result = pa.process(message)
+            # Store results for expand
+            if hasattr(pa, '_last_results'):
+                self._last_pattern_results = pa._last_results
+            return result
         
         if any(k in msg_lower for k in ['loop', 'iterate', 'each item', 'for each']):
             logger.pattern("Detected: Loop/Iteration pattern")
@@ -277,6 +282,40 @@ class Jarvis:
             logger.tool("Using: GitHub MCP")
             query = msg_lower.replace('search github', '').replace('find repo', '').replace('github search', '').strip()
             return mcp_tools['github'].search_repos(query)
+        
+        # === EXPAND COMMAND ===
+        if msg_lower.strip().startswith('expand'):
+            logger.step("Expand requested")
+            parts = msg_lower.split()
+            agent_name = parts[1] if len(parts) > 1 else None
+            
+            # Check stored last pattern results
+            if hasattr(self, '_last_pattern_results') and self._last_pattern_results:
+                results = self._last_pattern_results
+                if not agent_name:
+                    output = "\n📋 FULL RESULTS:\n"
+                    for role, data in results.items():
+                        output += f"\n{'='*60}\n"
+                        output += f"🤖 **{data['role'].upper()}** ({data.get('time', 0):.2f}s)\n"
+                        output += f"{'='*60}\n"
+                        output += f"{data['result']}\n"
+                    return output
+                else:
+                    for role, data in results.items():
+                        if agent_name.lower() in role.lower():
+                            return f"\n🤖 **{data['role'].upper()}** ({data.get('time', 0):.2f}s)\n\n{data['result']}"
+                    return f"Agent '{agent_name}' not found."
+            
+            # Check parallel pattern
+            try:
+                from src.agents.advanced.parallel_execution import ParallelAgents
+                pa = ParallelAgents()
+                if hasattr(pa, 'expand'):
+                    return pa.expand(agent_name)
+            except:
+                pass
+            
+            return "No expandable results. Run a pattern first (e.g., 'analyze stocks in parallel')"
         
         # Filesystem MCP
         if msg_lower.strip().startswith('ls') or 'list files' in msg_lower or 'show directory' in msg_lower:
