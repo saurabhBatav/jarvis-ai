@@ -4,6 +4,9 @@ import os
 import sys
 import time
 
+# FIRST: Fix protobuf compatibility for ChromaDB
+os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
+
 # FIRST: Load env vars before any other imports
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _env_path = os.path.join(_project_root, '.env')
