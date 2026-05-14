@@ -1,7 +1,48 @@
 """Base Agent - Foundation for all Jarvis agents"""
 
+import os
+import requests
+from dotenv import load_dotenv
 from typing import Optional, Callable
 from praisonaiagents import Agent as PraisonAgent
+
+# Load .env with override - use __file__ for correct path resolution
+_base_path = os.path.dirname(os.path.abspath(__file__))  # src/agents/
+_jarvis_root = os.path.dirname(_base_path)  # src/
+_project_root = os.path.dirname(_jarvis_root)  # project root
+load_dotenv(os.path.join(_project_root, '.env'), override=True)
+
+# Now set from loaded .env - these override shell env
+os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
+os.environ['OPENAI_BASE_URL'] = os.getenv('OPENAI_BASE_URL', 'https://api.groq.com/openai/v1')
+
+API_KEY = os.environ.get("OPENAI_API_KEY", "")
+API_BASE = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL = "llama-3.1-8b-instant"
+
+
+def call_llm(prompt: str, system: str = None, max_tokens: int = 500) -> str:
+    """Direct Groq API call - bypasses PraisonAI issues"""
+    if not API_KEY:
+        return "Error: No API key"
+    
+    url = f"{API_BASE}/chat/completions"
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+    
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    
+    data = {"model": MODEL, "messages": messages, "temperature": 0.3, "max_tokens": max_tokens}
+    
+    try:
+        resp = requests.post(url, headers=headers, json=data, timeout=60)
+        if resp.status_code == 200:
+            return resp.json()["choices"][0]["message"]["content"]
+        return f"Error: {resp.status_code} - {resp.text[:100]}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
 class BaseAgent:
@@ -143,3 +184,11 @@ you can route to the appropriate agent. For general questions, answer directly."
                 "auto_memory": True
             }
         )
+
+    def chat(self, message: str) -> str:
+        """Use direct API call instead of PraisonAI"""
+        return call_llm(f"{self.instructions}\n\nUser: {message}", max_tokens=500)
+
+    def start(self, task: str) -> str:
+        """Use direct API call instead of PraisonAI"""
+        return call_llm(f"{self.instructions}\n\nTask: {task}", max_tokens=500)

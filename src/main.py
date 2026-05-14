@@ -3,16 +3,20 @@
 import os
 import sys
 
+# Load .env FIRST - before any other imports
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_env_path = os.path.join(_project_root, '.env')
+if os.path.exists(_env_path):
+    with open(_env_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                if key in ['OPENAI_API_KEY', 'OPENAI_BASE_URL']:
+                    os.environ[key] = val
+
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Load environment variables from .env
-from dotenv import load_dotenv
-
-# Find .env file in project root
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(project_root, '.env')
-load_dotenv(env_path, override=True)  # override shell env vars
+sys.path.insert(0, _project_root)
 
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
