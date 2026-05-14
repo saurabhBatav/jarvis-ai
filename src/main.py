@@ -176,16 +176,19 @@ class Jarvis:
         if self.memory.ltm.count() > 0:
             logger.step("Step 1: Searching memory...")
             logger.memory("Searching memory...")
-            results = self.memory.search_memory(message, n_results=3)
+            results = self.memory.search_memory(message, n_results=5)
             for r in results:
                 dist = r.get('distance', 999)
-                if dist < 1.3 or 'User memory:' in r['text']:
+                # Use higher threshold (1.5) for better recall
+                if dist < 1.5:
                     clean = r['text'].replace("User memory: ", "").replace("User preference: ", "")[:80]
                     relevant_memories.append(clean)
-                    if len(relevant_memories) >= 1:
+                    if len(relevant_memories) >= 2:
                         break
             if relevant_memories:
                 logger.success(f"Found {len(relevant_memories)} memory match(es)")
+                for mem in relevant_memories:
+                    logger.step(f"  → Memory: '{mem[:60]}...'")
             else:
                 logger.step("No relevant memories found")
 
@@ -802,28 +805,42 @@ Make it engaging, professional, and ready to post.""", max_tokens=2000)
 
     def _store_to_ltm(self, message: str, response: str) -> None:
         msg_lower = message.lower()
-        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who'):
+        
+        # Skip questions - don't store queries
+        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who') or msg_lower.startswith('do ') or msg_lower.startswith('can '):
             return
-        if 'remember' in msg_lower or 'memorize' in msg_lower or 'don\'t forget' in msg_lower:
+        
+        # Explicit memory commands (handle typos too)
+        if any(k in msg_lower for k in ['remember', 'remeber', 'rember', 'memorize', 'memorise', 'dont forget', "don't forget", 'store this', 'keep in mind']):
+            # Extract the memory content
             remember_text = message
-            if 'remember' in msg_lower:
-                remember_text = message.lower().split('remember', 1)[1].strip()
-            elif 'memorize' in msg_lower:
-                remember_text = message.lower().split('memorize', 1)[1].strip()
-            elif 'don\'t forget' in msg_lower:
-                remember_text = message.lower().split('don\'t forget', 1)[1].strip()
-            if remember_text and remember_text != message.lower():
+            for word in ['remember', 'remeber', 'rember', 'memorize', 'memorise', 'dont forget', "don't forget", 'store this', 'keep in mind']:
+                if word in msg_lower:
+                    remember_text = msg_lower.split(word, 1)[-1].strip()
+                    break
+            if remember_text and len(remember_text) > 2:
                 enriched_text = f"User memory: {remember_text}"
+                logger.step(f"Storing to LTM: '{remember_text[:50]}...'")
                 self.memory.add_to_memory(enriched_text, metadata={'type': 'explicit_memory', 'source': 'chat'})
-            return
-        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'i hate']
+                return
+        
+        # Preference patterns
+        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'my favorite', 'fav movie', 'fav food', 'fav color']
         if any(k in msg_lower for k in preference_patterns):
             if '?' not in message and 'what' not in msg_lower[:10]:
                 self.memory.add_to_memory(f"User preference: {message}", metadata={'type': 'preference', 'source': 'chat'})
+                logger.step(f"Storing preference: '{message[:50]}...'")
+                return
+        
+        # Finance queries
         if 'portfolio' in msg_lower or 'holdings' in msg_lower:
             self.memory.add_to_memory(f"Finance query: {response[:200]}", metadata={'type': 'finance', 'source': 'chat'})
+            return
+        
+        # Research queries
         if any(k in msg_lower for k in ['research', 'learn', 'understand']):
             self.memory.add_to_memory(f"Research topic: {message}", metadata={'type': 'research', 'source': 'chat'})
+            return
 
     def help(self) -> str:
         return f"""🎯 Jarvis Commands:
