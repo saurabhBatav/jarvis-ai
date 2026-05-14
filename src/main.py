@@ -58,9 +58,57 @@ class Jarvis:
         
         # Personalized greeting
         print(f"\n{self.profile.get_welcome_message()}")
+        
+        # Add weather/time info for JARVIS mode
+        if self.profile.is_jarvis_mode():
+            self._jarvis_status_report()
+        
         print(f"\n📋 Available Agents: {len(self.registry.get_all_agents())}")
         for name, info in self.registry.get_all_agents().items():
             print(f"  - {name}: {info['description'][:60]}...")
+    
+    def _jarvis_status_report(self):
+        """Display JARVIS-style status report"""
+        from datetime import datetime
+        now = datetime.now()
+        hour = now.hour
+        
+        time_greeting = "Good morning" if 6 <= hour < 12 else "Good afternoon" if 12 <= hour < 18 else "Good evening"
+        
+        name = self.profile.get_name()
+        print(f"🤖 {time_greeting}, {name}.")
+        print(f"   It's {now.strftime('%I:%M %A')}")
+        
+        import random
+        statuses = [
+            "Systems online. All subsystems operational.",
+            "Running diagnostic checks. Everything looks good.",
+            "At your service, sir.",
+            "Ready for your instructions.",
+            "Monitoring your requests.",
+        ]
+        print(f"   {random.choice(statuses)}")
+    
+    def _format_jarvis_response(self, response: str) -> str:
+        """Format response in JARVIS style"""
+        if not self.profile.is_jarvis_mode():
+            return response
+        
+        user = self.profile.get_name()
+        
+        # Add JARVIS-style openings occasionally
+        if not response.startswith(("At ", "Very ", "Indeed", "I ", "The ", "As ")):
+            openings = [
+                f"Very well, {user}. ",
+                f"Of course, {user}. ",
+                f"Understood, {user}. ",
+                f"Certainly, {user}. ",
+            ]
+            import random
+            if random.random() < 0.3:
+                response = random.choice(openings) + response[0].lower() + response[1:]
+        
+        return response
     
     def route_task(self, message: str) -> str:
         """Route message to appropriate agent"""
@@ -102,6 +150,15 @@ class Jarvis:
         
         if 'profile' in msg_lower or 'about me' in msg_lower:
             return self._handle_show_profile(message)
+        
+        # JARVIS quick responses ONLY for simple greetings
+        if self.profile.is_jarvis_mode():
+            if msg_lower.strip() == 'hi' or msg_lower.strip() == 'hi.':
+                return f"At your service, {self.profile.get_name()}."
+            elif msg_lower.strip() == 'hello' or msg_lower.strip() == 'hello.':
+                return f"Good day, {self.profile.get_name()}. How may I assist you?"
+            elif msg_lower.strip() == 'how are you' or msg_lower.strip() == 'how are you?':
+                return "All systems operational. Thank you for asking, sir."
         
         # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
         remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
@@ -178,7 +235,41 @@ class Jarvis:
                 if relevant_memories:
                     custom_memory_context = "\n\n[Your persistent memories: " + " | ".join(relevant_memories[:3]) + "]"
             
-            return self.assistant.start(message + custom_memory_context)
+            # Build system prompt for JARVIS style if in JARVIS mode
+            if self.profile.is_jarvis_mode():
+                name = self.profile.get_name()
+                
+                # Include memory context in the prompt
+                memory_info = ""
+                if relevant_memories:
+                    memory_info = f"\n\nUser's known information: " + " | ".join(relevant_memories[:3])
+                
+                system_prefix = f"""You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), Tony Stark's AI assistant from Iron Man.
+
+IMPORTANT: Respond EXACTLY like J.A.R.V.I.S. from the Iron Man movies. 
+
+Rules:
+- Use formal, polished speech like "At your service, sir" or "Very well" or "Working on it, sir"
+- Be efficient and concise, not overly verbose  
+- Add "sir" when appropriate
+- Never say things like "I'm an AI language model" or "As an AI"
+- Use the user's known information to personalize responses
+- Be loyal and ready to serve
+- Never break character
+
+{memory_info}
+
+User is asking: {message}
+"""
+                response = self.assistant.start(system_prefix)
+            else:
+                response = self.assistant.start(message + custom_memory_context)
+            
+            # Apply JARVIS formatting
+            if self.profile.is_jarvis_mode():
+                response = self._format_jarvis_response(response)
+            
+            return response
     
     def _handle_finance(self, message: str) -> str:
         msg = message.lower()
@@ -338,8 +429,11 @@ class Jarvis:
         elif 'companion' in msg_lower:
             self.profile.set_personality_mode("companion")
             return "🤝 Got it! I'll be your companion from now on."
+        elif 'jarvis' in msg_lower or 'iron man' in msg_lower or 'tony' in msg_lower:
+            self.profile.set_personality_mode("jarvis")
+            return "😎 At your service, sir. Initializing JARVIS personality protocol. How may I assist you today?"
         else:
-            return "I can be: Assistant (professional), Companion (friendly), Teacher (educational), or Friend (casual). Which would you like?"
+            return "I can be: JARVIS (Iron Man's AI), Assistant (professional), Companion (friendly), Teacher (educational), or Friend (casual). Which would you like?"
     
     def _handle_set_preferences(self, message: str) -> str:
         """Handle user preference settings"""
@@ -591,6 +685,9 @@ Say 'prefer brief responses' to adjust style."""
             metadata={'source': 'interactive'}
         )
         
+        # 8. Format in JARVIS style if active
+        response = self._format_jarvis_response(response)
+        
         return response
     
     def help(self) -> str:
@@ -640,7 +737,16 @@ def main():
             
             # Get Jarvis response
             response = jarvis.chat(user_input)
-            print(f"\n🤖 Jarvis: {response}\n")
+            
+            # Clean response - take first good response only
+            lines = response.split('\n\n')
+            clean = lines[0].strip() if lines else response[:300]
+            
+            # Remove any box-drawing characters that are debug output
+            clean = clean.replace('╭─', '').replace('╰─', '').replace('│', '')
+            clean = clean.replace('Task', '').replace('Agent', '').replace('Response', '')
+            
+            print(f"\n🤖 Jarvis: {clean}\n")
             
         except KeyboardInterrupt:
             print("\n\n👋 Goodbye!")

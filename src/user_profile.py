@@ -32,7 +32,7 @@ class UserProfile:
             "preferences": {
                 "communication_style": "balanced",  # brief, balanced, detailed
                 "formality": "casual",  # casual, balanced, formal
-                "personality_mode": "assistant",  # assistant, companion, teacher, friend
+                "personality_mode": "jarvis",  # jarvis, assistant, companion, teacher, friend
                 "response_length": "medium",  # short, medium, long
             },
             "interests": [],
@@ -72,10 +72,39 @@ class UserProfile:
     
     def set_personality_mode(self, mode: str):
         """Set personality mode"""
-        valid_modes = ["assistant", "companion", "teacher", "friend"]
+        valid_modes = ["jarvis", "assistant", "companion", "teacher", "friend"]
         if mode in valid_modes:
             self.profile["preferences"]["personality_mode"] = mode
             self.save()
+    
+    def is_jarvis_mode(self) -> bool:
+        """Check if JARVIS mode is active"""
+        return self.profile.get("preferences", {}).get("personality_mode") == "jarvis"
+    
+    def format_as_jarvis(self, response: str, user_name: str = None) -> str:
+        """Format response in JARVIS style"""
+        if not self.is_jarvis_mode():
+            return response
+        
+        user = user_name or "sir"
+        
+        jarvis_phrases = [
+            ("at your service", "at your service, " + user),
+            ("i'm ", "I am "),
+            ("dont", "do not"),
+            ("cant", "cannot"),
+            ("wont", "will not"),
+            ("ive", "I have"),
+            ("youre", "you are"),
+            ("im ", "I am "),
+        ]
+        
+        result = response
+        
+        if not response.endswith('.') and not response.endswith('!'):
+            result = result.rstrip() + "."
+        
+        return result
     
     def add_interest(self, interest: str):
         """Add an interest"""
@@ -104,6 +133,16 @@ class UserProfile:
         conv_count = self.profile.get("conversation_count", 0)
         mode = self.get_preference("personality_mode", "assistant")
         
+        # JARVIS mode messages
+        if mode == "jarvis":
+            if conv_count == 0:
+                return f"🤖 Initializing JARVIS protocol. At your service, {name}. How may I assist you?"
+            elif conv_count < 5:
+                return f"🤖 Welcome back, {name}. Systems are operational. Awaiting your instructions."
+            else:
+                return f"🤖 Good to see you again, {name}. {conv_count} sessions logged. Ready when you are."
+        
+        # Standard messages
         if conv_count == 0:
             return f"👋 Hi {name}! I'm Jarvis, your AI companion. I'm here to help you with anything you need. What would you like to do today?"
         elif conv_count < 5:
