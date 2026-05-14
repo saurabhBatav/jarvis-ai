@@ -2,6 +2,7 @@
 
 import os
 import requests
+import time
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any
@@ -16,7 +17,28 @@ API_BASE = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL = "llama-3.1-8b-instant"
 
 
-def call_llm(prompt: str, system: str = None, max_tokens: int = 400) -> str:
+# ============================================================
+# 📊 VERBOSE LOGGING
+# ============================================================
+class Logger:
+    @staticmethod
+    def step(msg):
+        print(f"  📍 {msg}")
+    
+    @staticmethod
+    def agent_start(role):
+        print(f"    🤖 Starting {role}...")
+    
+    @staticmethod
+    def agent_done(role, time_taken):
+        print(f"    ✓ {role} done ({time_taken:.2f}s)")
+    
+    @staticmethod
+    def result(role, preview):
+        print(f"    📝 {role}: {preview[:80]}...")
+
+
+def call_llm(prompt: str, system: str = None, max_tokens: int = 600) -> str:
     """Direct Groq API call"""
     if not API_KEY:
         return "Error: No API key"
@@ -52,14 +74,26 @@ class ParallelAgents:
         }
     
     def execute_parallel(self, task: str, roles: List[str]) -> Dict[str, Any]:
-        """Execute multiple agents in parallel"""
+        """Execute multiple agents in parallel with verbose logging"""
+        
+        Logger.step(f"Executing {len(roles)} agents in parallel: {', '.join(roles)}")
         
         def run_agent(role):
+            start = time.time()
+            Logger.agent_start(role)
+            
             system = self.role_prompts.get(role, f"You are a {role} specialist.")
-            result = call_llm(f"Task: {task}\n\nYour role: {role}", system=system, max_tokens=300)
-            return {"role": role, "result": result}
+            result = call_llm(f"Task: {task}\n\nYour role: {role}", system=system, max_tokens=600)
+            
+            elapsed = time.time() - start
+            Logger.agent_done(role, elapsed)
+            Logger.result(role, result)
+            
+            return {"role": role, "result": result, "time": elapsed}
         
         results = {}
+        start_total = time.time()
+        
         with ThreadPoolExecutor(max_workers=len(roles)) as executor:
             futures = {executor.submit(run_agent, role): role for role in roles}
             for future in as_completed(futures):
@@ -67,14 +101,22 @@ class ParallelAgents:
                 try:
                     results[role] = future.result()
                 except Exception as e:
-                    results[role] = {"role": role, "result": f"Error: {str(e)}"}
+                    results[role] = {"role": role, "result": f"Error: {str(e)}", "time": 0}
+        
+        total_time = time.time() - start_total
+        Logger.step(f"All agents completed in {total_time:.2f}s")
         
         return results
     
     def process(self, task: str) -> str:
         """Auto-detect needed parallel agents and execute"""
         
+        print("\n" + "="*50)
+        print("⚡ PARALLEL EXECUTION PATTERN")
+        print("="*50)
+        
         # Analyze task to determine roles
+        Logger.step("Analyzing task to determine roles...")
         analysis = call_llm(f"""What roles are needed for this task? Choose from: research, writer, analyst, coder, reviewer
 
 Task: {task}
@@ -82,17 +124,25 @@ Task: {task}
 Respond with comma-separated roles:""", max_tokens=100)
         
         # Parse roles
-        roles = [r.strip().lower() for r in analysis.split(',')][:4]  # Max 4
+        roles = [r.strip().lower() for r in analysis.split(',')][:4]
         if not roles or "Error" in analysis:
-            roles = ["research", "writer"]  # Default
+            roles = ["research", "analyst", "writer"]  # Default
+        
+        Logger.step(f"Selected roles: {', '.join(roles)}")
         
         # Execute in parallel
         results = self.execute_parallel(task, roles)
         
-        # Format output
-        output = f"⚡ **Parallel Execution** ({len(roles)} agents)\n\n"
+        # Format detailed output
+        output = f"\n{'='*50}"
+        output += f"\n⚡ PARALLEL EXECUTION RESULTS ({len(roles)} agents)"
+        output += f"\n{'='*50}\n\n"
+        
         for role, data in results.items():
-            output += f"**{data['role'].upper()}:**\n{data['result'][:200]}...\n\n"
+            output += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            output += f"🤖 **{data['role'].upper()}** (completed in {data.get('time', 0):.2f}s)\n"
+            output += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            output += f"{data['result']}\n\n"
         
         return output
 
@@ -105,18 +155,9 @@ def main():
     
     pa = ParallelAgents()
     
-    # Test 1: Simple parallel
-    print("\n🔹 Test 1: Research + Write in parallel")
-    result = pa.execute_parallel("Explain AI to a beginner", ["research", "writer"])
-    for role, data in result.items():
-        print(f"  {role}: {data['result'][:100]}...")
-    
-    # Test 2: Auto-detect
-    print("\n🔹 Test 2: Auto-detect parallel")
-    result = pa.process("Create a blog post about Python programming")
-    print(f"Result: {result[:300]}...")
-    
-    print("\n" + "=" * 60)
+    print("\n🔹 Test: Research + Write + Analyze in parallel")
+    result = pa.process("Explain AI trends")
+    print(result)
 
 
 if __name__ == "__main__":
