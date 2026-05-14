@@ -22,7 +22,8 @@ class BaseAgent:
         llm: str = None,
         tools: Optional[list] = None,
         allow_delegation: bool = True,
-        allow_code_execution: bool = False
+        allow_code_execution: bool = False,
+        use_memory: bool = True
     ):
         self.name = name
         self.role = role
@@ -33,6 +34,7 @@ class BaseAgent:
         self.tools = tools or []
         self.allow_delegation = allow_delegation
         self.allow_code_execution = allow_code_execution
+        self.use_memory = use_memory
         self._agent = None
 
     def _build_instructions(self) -> str:
@@ -45,7 +47,8 @@ class BaseAgent:
             llm=self.llm,
             tools=self.tools if self.tools else None,
             allow_delegation=self.allow_delegation,
-            allow_code_execution=self.allow_code_execution
+            allow_code_execution=self.allow_code_execution,
+            memory=self.use_memory
         )
 
     def initialize(self) -> None:
@@ -68,6 +71,11 @@ class BaseAgent:
         if self._agent is None:
             self.initialize()
         return self._agent
+
+    def clear_memory(self) -> None:
+        """Clear the agent's built-in memory"""
+        if self._agent is not None and hasattr(self._agent, 'memory'):
+            self._agent.memory.reset_all()
 
     def __repr__(self) -> str:
         return f"BaseAgent(name={self.name}, role={self.role}, llm={self.llm})"
@@ -95,14 +103,31 @@ def create_agent(
 
 
 class JarvisAssistant(BaseAgent):
-    """Default Jarvis assistant agent"""
+    """Default Jarvis assistant agent with built-in memory and session persistence"""
 
-    def __init__(self, llm: str = "llama-3.1-8b-instant", **kwargs):
+    def __init__(self, llm: str = "llama-3.1-8b-instant", use_memory: bool = True, session_id: str = "jarvis_main", **kwargs):
         super().__init__(
             name="Jarvis Assistant",
             role="General Assistant",
             goal="Help the user with any task they request",
             backstory="You are a helpful AI assistant ready to help with any task.",
             llm=llm,
+            use_memory=use_memory,
             **kwargs
+        )
+        self.session_id = session_id
+
+    def _create_praison_agent(self) -> PraisonAgent:
+        return PraisonAgent(
+            name=self.name,
+            instructions=self.instructions,
+            llm=self.llm,
+            tools=self.tools if self.tools else None,
+            allow_delegation=self.allow_delegation,
+            allow_code_execution=self.allow_code_execution,
+            memory={
+                "session_id": self.session_id,
+                "user_id": "main_user",
+                "auto_memory": True
+            }
         )

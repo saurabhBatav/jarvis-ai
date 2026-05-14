@@ -2,6 +2,18 @@
 
 import os
 import sys
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load environment variables from .env
+from dotenv import load_dotenv
+
+# Find .env file in project root
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(project_root, '.env')
+load_dotenv(env_path, override=True)  # override shell env vars
+
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
 from src.memory import MemoryManager
@@ -12,8 +24,10 @@ class Jarvis:
     
     def __init__(self):
         # Set up environment
-        os.environ.setdefault('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
-        os.environ.setdefault('OPENAI_BASE_URL', 'https://api.groq.com/openai/v1')
+        if not os.getenv('OPENAI_API_KEY'):
+            os.environ['OPENAI_API_KEY'] = os.getenv('GROQ_API_KEY', '')
+        if not os.getenv('OPENAI_BASE_URL'):
+            os.environ['OPENAI_BASE_URL'] = 'https://api.groq.com/openai/v1'
         
         # Initialize main assistant
         self.assistant = JarvisAssistant(llm="llama-3.1-8b-instant")
@@ -35,8 +49,27 @@ class Jarvis:
         """Route message to appropriate agent"""
         msg_lower = message.lower()
         
+        # URL detection FIRST - fetch web pages
+        if 'http://' in message or 'https://' in message:
+            return self._handle_search(message)
+        
+        # Search keywords FIRST (before news/other)
+        if any(k in msg_lower for k in ['search', 'find', 'look up', 'google', 'web']):
+            return self._handle_search(message)
+        
+        # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
+        remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
+        if any(k in msg_lower for k in remember_patterns):
+            # Store to custom LTM (ChromaDB)
+            self._store_to_ltm(message, "")
+            return "Got it! I've stored that in my memory. You can ask me to remember things and I'll store them persistently."
+        
+        # MEMORY QUERIES - Let LLM agent handle (has built-in memory)
+        # Pass to assistant - PraisonAI built-in memory will handle it
+        # BUT also search custom LTM as context
+        
         # Finance keywords
-        if any(k in msg_lower for k in ['stock', 'share', 'portfolio', 'crypto', 'invest', 'price', 'trading']):
+        if any(k in msg_lower for k in ['stock', 'share', 'portfolio', 'crypto', 'invest', 'price', 'trading', 'aapl', 'googl', 'msft', 'tsla']):
             return self._handle_finance(message)
         
         # Research keywords
@@ -44,20 +77,62 @@ class Jarvis:
             return self._handle_research(message)
         
         # Work-Life keywords
-        elif any(k in msg_lower for k in ['weather', 'task', 'todo', 'news', 'time', 'holiday', 'calendar']):
+        elif any(k in msg_lower for k in ['weather', 'task', 'todo', 'time', 'holiday', 'calendar']):
+            return self._handle_worklife(message)
+        
+        # News only (without search keyword)
+        elif 'news' in msg_lower:
             return self._handle_worklife(message)
         
         # Health keywords
         elif any(k in msg_lower for k in ['health', 'weight', 'exercise', 'sleep', 'mood', 'bmi', 'water', 'symptom']):
             return self._handle_health(message)
         
-        # Search keywords
-        elif any(k in msg_lower for k in ['search', 'find', 'look up', 'google', 'web']):
-            return self._handle_search(message)
-        
-        # Default to main assistant
+        # Default to main assistant (with built-in PraisonAI memory + session)
         else:
-            return self.assistant.start(message)
+            # Check custom LTM for relevant context and pass to LLM
+            custom_memory_context = ""
+            if self.memory.ltm.count() > 0:
+                # Try multiple search approaches
+                results = []
+                
+                # 1. Direct search
+                direct_results = self.memory.search_memory(message, n_results=10)
+                results.extend(direct_results)
+                
+                # 2. Extract key nouns and search (for "favorite X" patterns)
+                msg_lower = message.lower()
+                if 'favorite' in msg_lower or 'my fav' in msg_lower:
+                    # Extract what they're asking about
+                    import re
+                    match = re.search(r'favorite\s+(\w+)', msg_lower)
+                    if match:
+                        topic = match.group(1)
+                        topic_results = self.memory.search_memory(topic, n_results=10)
+                        results.extend(topic_results)
+                
+                # Get unique results with good similarity
+                seen = set()
+                relevant_memories = []
+                for r in results:
+                    text = r['text']
+                    if text in seen:
+                        continue
+                    
+                    dist = r.get('distance', 999)
+                    # Accept if: good distance OR explicit memory
+                    if dist < 1.4 or 'User memory:' in text or 'explicitly remembered' in text:
+                        clean_text = text.replace("User memory: ", "").replace("User preference: ", "").replace("User explicitly remembered: ", "")
+                        relevant_memories.append(clean_text)
+                        seen.add(text)
+                    
+                    if len(relevant_memories) >= 3:
+                        break
+                
+                if relevant_memories:
+                    custom_memory_context = "\n\n[Your persistent memories: " + " | ".join(relevant_memories[:3]) + "]"
+            
+            return self.assistant.start(message + custom_memory_context)
     
     def _handle_finance(self, message: str) -> str:
         msg = message.lower()
@@ -100,19 +175,199 @@ class Jarvis:
             return self.health.quick_tip()
     
     def _handle_search(self, message: str) -> str:
-        query = message.replace('search', '').replace('find', '').strip()
+        # Check if it's a URL
+        if 'http://' in message or 'https://' in message:
+            # Extract URL and fetch content
+            import re
+            urls = re.findall(r'https?://[^\s]+', message)
+            if urls:
+                return self.search.fetch(urls[0])
+        
+        query = message.replace('search', '').replace('find', '').replace('research about', '').strip()
         return self.search.quick_search(query)
     
+    def _handle_memory_query(self, message: str) -> str:
+        """Handle queries about user's stored memories"""
+        msg_lower = message.lower()
+        
+        # Extract the query topic
+        query = message.lower()
+        memory_phrases = ["what is my", "what's my", "tell me about my", "remember my", "where do i", "where am i", "what do i like", "who am i"]
+        for phrase in memory_phrases:
+            if phrase in query:
+                query = query.split(phrase, 1)[1].strip()
+                break
+        
+        # If query is short, also search with full message for better matching
+        if len(query) < 5:
+            search_queries = [query, message.lower()]
+        else:
+            search_queries = [query]
+        
+        # Search LTM for relevant memories
+        results = []
+        for sq in search_queries:
+            r = self.memory.search_memory(sq, n_results=10)
+            for item in r:
+                # Only accept results with good similarity (distance < 1.2)
+                if item.get('distance', 999) < 1.2:
+                    if item not in results:
+                        results.append(item)
+        
+        # Fallback: if no good results, do keyword search on all LTM
+        if not results:
+            all_ltm = self.memory.ltm.get_all(limit=50)
+            query_words = set(query.lower().split())
+            for item in all_ltm:
+                text_lower = item['text'].lower()
+                if any(word in text_lower for word in query_words if len(word) > 2):
+                    results.append(item)
+                    if len(results) >= 5:
+                        break
+        
+        # Also get entities
+        entities = self.memory.entity.get_entities()
+        entity_info = []
+        for e in entities[:5]:
+            attrs = e.attributes if hasattr(e, 'attributes') else {}
+            entity_info.append(f"{e.name}: {attrs}")
+        
+        if results or entity_info:
+            lines = ["📝 Here's what I remember:"]
+            
+            # Add LTM results
+            for r in results:
+                text = r['text']
+                # Clean up the text
+                text = text.replace("User preference: ", "").replace("User explicitly remembered: ", "").replace("User memory: ", "")
+                lines.append(f"• {text}")
+            
+            # Add entity info
+            if entity_info:
+                lines.append("\n👤 Known about you:")
+                for e in entity_info[:3]:
+                    lines.append(f"  - {e}")
+            
+            return "\n".join(lines)
+        else:
+            # No memories found
+            return "I don't have any stored memories about that. You can say 'Remember that...' to store something!"
+    
+    def _extract_entities(self, message: str) -> None:
+        """Extract and track named entities from message"""
+        import re
+        # Extract capitalized words (potential names/entities)
+        potential_entities = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', message)
+        
+        # Common entity types to track
+        entity_keywords = {
+            'person': ['i am', 'my name is', 'called'],
+            'company': ['company', 'work at', 'working at', 'employer'],
+            'location': ['live in', 'located in', 'city', 'country'],
+            'preference': ['i like', 'i prefer', 'i love', 'hate', 'favorite'],
+        }
+        
+        msg_lower = message.lower()
+        
+        for entity in potential_entities[:3]:
+            if len(entity) > 2:
+                # Determine entity type
+                entity_type = 'unknown'
+                for etype, keywords in entity_keywords.items():
+                    if any(k in msg_lower for k in keywords):
+                        entity_type = etype
+                        break
+                
+                # Add to entity memory
+                self.memory.add_entity(entity, entity_type, {'source': 'chat'})
+    
+    def _store_to_ltm(self, message: str, response: str) -> None:
+        """Store important information to LTM for semantic search"""
+        msg_lower = message.lower()
+        
+        # DON'T store questions - they pollute memory
+        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who'):
+            return
+        
+        # EXPLICIT REMEMBER COMMANDS
+        if 'remember' in msg_lower or 'memorize' in msg_lower or 'don\'t forget' in msg_lower:
+            # Extract what to remember (everything after remember)
+            remember_text = message
+            if 'remember' in msg_lower:
+                remember_text = message.lower().split('remember', 1)[1].strip()
+            elif 'memorize' in msg_lower:
+                remember_text = message.lower().split('memorize', 1)[1].strip()
+            elif 'don\'t forget' in msg_lower:
+                remember_text = message.lower().split('don\'t forget', 1)[1].strip()
+            
+            if remember_text and remember_text != message.lower():
+                # Add context for better semantic search
+                enriched_text = f"User memory: {remember_text}"
+                self.memory.add_to_memory(
+                    enriched_text,
+                    metadata={'type': 'explicit_memory', 'source': 'chat'}
+                )
+            return
+        
+        # Store user preferences ONLY for factual statements (not questions)
+        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'i hate']
+        if any(k in msg_lower for k in preference_patterns):
+            # Make sure it's a statement, not a question
+            if '?' not in message and 'what' not in msg_lower[:10]:
+                self.memory.add_to_memory(
+                    f"User preference: {message}",
+                    metadata={'type': 'preference', 'source': 'chat'}
+                )
+        
+        # Store important facts from responses
+        if 'portfolio' in msg_lower or 'holdings' in msg_lower:
+            self.memory.add_to_memory(
+                f"Finance query: {response[:200]}",
+                metadata={'type': 'finance', 'source': 'chat'}
+            )
+        
+        # Store research topics
+        if any(k in msg_lower for k in ['research', 'learn', 'understand']):
+            self.memory.add_to_memory(
+                f"Research topic: {message}",
+                metadata={'type': 'research', 'source': 'chat'}
+            )
+    
     def chat(self, message: str) -> str:
-        """Main chat method"""
-        # Store in memory
+        """Main chat method with full 4-tier memory integration"""
+        # 1. Store in STM (Short-Term Memory)
         self.memory.add_message('user', message)
         
-        # Get response
-        response = self.route_task(message)
+        # 2. Extract entities (Entity Memory)
+        self._extract_entities(message)
         
-        # Store response
+        # 3. Get context from LTM for better response
+        ltm_context = ""
+        if self.memory.ltm.count() > 0:
+            results = self.memory.search_memory(message, n_results=2)
+            if results:
+                ltm_context = "Previous relevant info: " + " | ".join([r['text'][:100] for r in results])
+        
+        # 4. Get response (with LTM context if available)
+        if ltm_context:
+            enhanced_message = f"{message}\n\nContext: {ltm_context}"
+            response = self.route_task(enhanced_message)
+        else:
+            response = self.route_task(message)
+        
+        # 5. Store to LTM for semantic search
+        self._store_to_ltm(message, response)
+        
+        # 6. Store in STM (assistant response)
         self.memory.add_message('assistant', response)
+        
+        # 7. Track in Episodic Memory
+        self.memory.track_interaction(
+            user_input=message,
+            response=response[:500] if len(response) > 500 else response,
+            episode_type='chat',
+            metadata={'source': 'interactive'}
+        )
         
         return response
     

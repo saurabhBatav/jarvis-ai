@@ -13,23 +13,30 @@ class SearchTools:
         """Search using DuckDuckGo (Free, no API key)"""
         try:
             url = "https://html.duckduckgo.com/html/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            }
             data = {"q": query, "b": ""}
             
-            response = requests.post(url, data=data, timeout=15)
+            response = requests.post(url, data=data, headers=headers, timeout=15)
             
             results = []
-            # Find all result blocks
-            result_pattern = r'<a class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>.*?<a class="result__snippet"[^>]*>([^<]+)</a>'
+            # Find links
+            link_pattern = r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>'
+            # Find snippets
+            snippet_pattern = r'<a[^>]*class="result__snippet"[^>]*>([^<]+)</a>'
             
-            for match in re.finditer(result_pattern, response.text, re.DOTALL)[:max_results]:
-                url = match.group(1)
-                title = match.group(2).strip()
-                snippet = match.group(3).strip()
-                
+            links = re.findall(link_pattern, response.text)
+            snippets = re.findall(snippet_pattern, response.text)
+            
+            for i, (url, title) in enumerate(links[:max_results]):
+                snippet = snippets[i] if i < len(snippets) else ""
                 results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": snippet
+                    "title": title.strip(),
+                    "url": url.strip(),
+                    "snippet": snippet.strip()
                 })
             
             return results if results else [{"error": "No results found"}]
