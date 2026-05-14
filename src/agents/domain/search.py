@@ -11,6 +11,7 @@ class SearchTools:
     @staticmethod
     def duckduckgo_search(query: str, max_results: int = 10) -> List[Dict]:
         """Search using DuckDuckGo (Free, no API key)"""
+        print(f"    🌐 [TOOL] duckduckgo_search() - Making HTTP request...")
         try:
             url = "https://html.duckduckgo.com/html/"
             headers = {
@@ -20,7 +21,9 @@ class SearchTools:
             }
             data = {"q": query, "b": ""}
             
+            print(f"    ⏳ [TOOL] Requesting DuckDuckGo: {url}")
             response = requests.post(url, data=data, headers=headers, timeout=15)
+            print(f"    ✓ [TOOL] Response received: {response.status_code}")
             
             results = []
             # Find links
@@ -39,8 +42,10 @@ class SearchTools:
                     "snippet": snippet.strip()
                 })
             
+            print(f"    📊 [TOOL] Parsed {len(results)} results")
             return results if results else [{"error": "No results found"}]
         except Exception as e:
+            print(f"    ✗ [TOOL] Error: {str(e)}")
             return [{"error": str(e)}]
     
     @staticmethod
@@ -132,13 +137,17 @@ Be concise but thorough."""
     
     def search(self, query: str, max_results: int = 5) -> str:
         """Perform web search"""
+        print(f"  🔍 [SEARCH] Query: '{query}' (max_results={max_results})")
         results = self.tools.duckduckgo_search(query, max_results)
         
         if "error" in results[0]:
-            # Try SearXNG as backup
+            print(f"  ⚠️ DuckDuckGo failed, trying SearXNG...")
             results = self.tools.searxng_search(query, max_results)
             if "error" in results[0]:
+                print(f"  ✗ Search failed")
                 return f"Search failed: {results[0]['error']}"
+        
+        print(f"  ✓ Found {len(results)} results")
         
         lines = [f"🔍 Results for '{query}':\n"]
         
@@ -151,33 +160,41 @@ Be concise but thorough."""
     
     def quick_search(self, query: str) -> str:
         """Quick search with minimal output"""
+        print(f"    🌐 [TOOL] quick_search() - Query: '{query}'")
         results = self.tools.duckduckgo_search(query, max_results=3)
-        
+
         if "error" in results[0]:
+            print(f"    ✗ [TOOL] Quick search failed")
             return "No results found."
-        
+
         lines = []
         for r in results[:3]:
             lines.append(f"• {r.get('title', 'N/A')}")
             lines.append(f"  {r.get('snippet', '')[:100]}...")
-        
+
+        print(f"    ✓ [TOOL] Returning {len(results)} results")
         return "\n".join(lines)
-    
+
     def fetch(self, url: str) -> str:
         """Fetch and summarize a URL"""
+        print(f"    🌐 [TOOL] fetch_url() - URL: '{url[:50]}...'")
         data = self.tools.fetch_url(url)
-        
+
         if "error" in data:
+            print(f"    ✗ [TOOL] Fetch error: {data['error']}")
             return f"Error: {data['error']}"
-        
+
+        print(f"    ✓ [TOOL] Fetched title: {data.get('title', 'N/A')[:50]}")
         return f"📄 {data.get('title', 'N/A')}\n\n{data.get('content', 'No content')}..."
-    
+
     def compare(self, item1: str, item2: str) -> str:
         """Compare two items"""
+        print(f"    🌐 [TOOL] compare() - {item1} vs {item2}")
         query = f"compare {item1} vs {item2}"
         return self.search(query, max_results=5)
-    
+
     def trending(self, topic: str = "technology") -> str:
         """Get trending topics"""
+        print(f"    🌐 [TOOL] trending() - Topic: '{topic}'")
         query = f"trending {topic} this week"
         return self.quick_search(query)

@@ -23,25 +23,33 @@ MODEL = "llama-3.1-8b-instant"
 
 def call_llm(prompt: str, system: str = None, max_tokens: int = 500) -> str:
     """Direct Groq API call - bypasses PraisonAI issues"""
+    print(f"    🌐 [LLM] call_llm() - max_tokens={max_tokens}, prompt_len={len(prompt)}")
     if not API_KEY:
+        print(f"    ✗ [LLM] No API key configured")
         return "Error: No API key"
-    
+
     url = f"{API_BASE}/chat/completions"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-    
+
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    
+
     data = {"model": MODEL, "messages": messages, "temperature": 0.3, "max_tokens": max_tokens}
-    
+
     try:
+        print(f"    ⏳ [LLM] Calling {API_BASE}...")
+        import time
+        start = time.time()
         resp = requests.post(url, headers=headers, json=data, timeout=60)
+        elapsed = time.time() - start
+        print(f"    ✓ [LLM] Response received ({resp.status_code}, {elapsed:.2f}s)")
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]
         return f"Error: {resp.status_code} - {resp.text[:100]}"
     except Exception as e:
+        print(f"    ✗ [LLM] Error: {str(e)}")
         return f"Error: {str(e)}"
 
 
