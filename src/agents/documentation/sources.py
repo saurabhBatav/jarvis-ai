@@ -189,12 +189,120 @@ class LlamaIndexSource(DocumentationSource):
         )
 
 
+class LocalExamplesSource(DocumentationSource):
+    """Local PraisonAI examples from examples/ folder"""
+    
+    def __init__(self):
+        # Get project root - go up from src/agents/documentation/sources.py
+        import sys
+        import os
+        # sources.py is in src/agents/documentation/, so go up 3 levels to get project root
+        current_file = os.path.abspath(__file__)
+        # Go up: sources.py -> documentation -> agents -> src -> project_root
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+        examples_dir = os.path.join(project_root, "examples")
+        
+        super().__init__(
+            name="LocalExamples",
+            base_url="file://" + examples_dir,
+            topics=self._scan_examples(examples_dir)
+        )
+        self.examples_dir = examples_dir
+    
+    def _scan_examples(self, examples_dir: str) -> Dict[str, str]:
+        """Scan examples folder and create topic mapping"""
+        topics = {}
+        
+        if not os.path.exists(examples_dir):
+            return topics
+        
+        # Map common topics to example files
+        topic_map = {
+            "agent": "consolidated_params/basic_agent.py",
+            "agents": "consolidated_params/basic_agents.py",
+            "multi agent": "consolidated_params/basic_agents.py",
+            "workflow": "consolidated_params/basic_workflow.py",
+            "memory": "consolidated_params/basic_memory.py",
+            "guardrails": "consolidated_params/basic_guardrails.py",
+            "planning": "consolidated_params/basic_planning.py",
+            "reflection": "consolidated_params/basic_reflection.py",
+            "hooks": "consolidated_params/basic_hooks.py",
+            "web": "consolidated_params/basic_web.py",
+            "knowledge": "consolidated_params/basic_knowledge.py",
+            "caching": "consolidated_params/basic_caching.py",
+            "autonomy": "consolidated_params/basic_autonomy.py",
+            "context": "consolidated_params/basic_context.py",
+            "output": "consolidated_params/basic_output.py",
+            "execution": "consolidated_params/basic_execution.py",
+            "serve": "serve/serve_example.py",
+            "server": "serve/serve_example.py",
+            "api": "serve/agent_as_api_single.py",
+            "mcp": "mcp/mcp_example.py",
+            "yaml": "yaml/simple_yaml_agent.py",
+            "template": "templates/00_agent_templates_basic.py",
+            "recipe": "recipes/example_llm_recipes.py",
+            "persistence": "persistence/minimal_agent_db.py",
+            "database": "persistence/simple_db_agent.py",
+            "redis": "persistence/redis_state.py",
+            "sqlite": "persistence/sqlite_local.py",
+            "postgres": "persistence/postgres_conversation_store.py",
+            "mysql": "persistence/mysql_conversation_store.py",
+            "mongodb": "persistence/mongodb_state_store.py",
+            "approval": "approval/agent_approval.py",
+            "policy": "policy/policy_example.py",
+            "reflection": "reflection/00_agent_reflection_basic.py",
+            "eval": "eval/accuracy_example.py",
+            "routing": "routing/routellm_example.py",
+        }
+        
+        for topic, path in topic_map.items():
+            topics[topic] = f"file://{examples_dir}/{path}"
+        
+        return topics
+    
+    def find_doc(self, query: str) -> Optional[str]:
+        """Find local example for a topic"""
+        query_lower = query.lower()
+        
+        # Direct match
+        if query_lower in self.topics:
+            return self.topics[query_lower]
+        
+        # Partial match
+        for key, url in self.topics.items():
+            if key in query_lower or query_lower in key:
+                return url
+        
+        return None
+    
+    def fetch_page(self, path: str) -> Dict:
+        """Read local example file"""
+        if path.startswith("file://"):
+            file_path = path.replace("file://", "")
+        else:
+            file_path = path
+        
+        try:
+            with open(file_path, "r") as f:
+                content = f.read()
+            
+            return {
+                "title": os.path.basename(file_path),
+                "content": content,
+                "source": "local",
+                "path": file_path
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+
 class DocumentationManager:
     """Manage all documentation sources"""
     
     def __init__(self):
         self.sources: List[DocumentationSource] = [
             # Already have PraisonAI in docs_search.py
+            LocalExamplesSource(),  # Local examples folder
             LangChainSource(),
             CrewAISource(),
             AutoGenSource(),
