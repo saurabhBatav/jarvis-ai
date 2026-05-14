@@ -1,9 +1,10 @@
-"""Jarvis Interactive Chat Interface"""
+"""Jarvis Interactive Chat Interface - Enhanced with verbose logging"""
 
 import os
 import sys
+import time
 
-# Load .env FIRST - before any other imports
+# FIRST: Load env vars before any other imports
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _env_path = os.path.join(_project_root, '.env')
 if os.path.exists(_env_path):
@@ -18,6 +19,59 @@ if os.path.exists(_env_path):
 # Add project root to path
 sys.path.insert(0, _project_root)
 
+# ============================================================
+# 📊 VERBOSE LOGGING SYSTEM
+# ============================================================
+
+class JarvisLogger:
+    """Colored logging for Jarvis operations"""
+    
+    COLORS = {
+        'HEADER': '\033[95m',
+        'BLUE': '\033[94m',
+        'CYAN': '\033[96m',
+        'GREEN': '\033[92m',
+        'YELLOW': '\033[93m',
+        'RED': '\033[91m',
+        'END': '\033[0m',
+        'BOLD': '\033[1m',
+    }
+    
+    @staticmethod
+    def agent(name):
+        print(f"{JarvisLogger.COLORS['GREEN']}🤖[AGENT]{JarvisLogger.COLORS['END']} {name}")
+    
+    @staticmethod
+    def tool(name):
+        print(f"{JarvisLogger.COLORS['CYAN']}🔧[TOOL]{JarvisLogger.COLORS['END']} {name}")
+    
+    @staticmethod
+    def pattern(name):
+        print(f"{JarvisLogger.COLORS['YELLOW']}🔀[PATTERN]{JarvisLogger.COLORS['END']} {name}")
+    
+    @staticmethod
+    def memory(op):
+        print(f"{JarvisLogger.COLORS['BLUE']}💾[MEMORY]{JarvisLogger.COLORS['END']} {op}")
+    
+    @staticmethod
+    def step(msg):
+        print(f"{JarvisLogger.COLORS['HEADER']}  →{JarvisLogger.COLORS['END']} {msg}")
+    
+    @staticmethod
+    def thinking(msg):
+        print(f"{JarvisLogger.COLORS['CYAN']}  💭{JarvisLogger.COLORS['END']} {msg}")
+    
+    @staticmethod
+    def success(msg):
+        print(f"{JarvisLogger.COLORS['GREEN']}  ✓{JarvisLogger.COLORS['END']} {msg}")
+    
+    @staticmethod
+    def error(msg):
+        print(f"{JarvisLogger.COLORS['RED']}  ✗{JarvisLogger.COLORS['END']} {msg}")
+
+logger = JarvisLogger()
+
+
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
 from src.agents.domain.news_summary import NewsSummaryAgent
@@ -30,34 +84,44 @@ from src.mcp_tools import get_mcp_tools
 
 
 class Jarvis:
-    """Main Jarvis interface with domain agents"""
+    """Main Jarvis interface with domain agents - Enhanced logging"""
     
     def __init__(self):
-        # Set up environment
-        if not os.getenv('OPENAI_API_KEY'):
-            os.environ['OPENAI_API_KEY'] = os.getenv('GROQ_API_KEY', '')
-        if not os.getenv('OPENAI_BASE_URL'):
-            os.environ['OPENAI_BASE_URL'] = 'https://api.groq.com/openai/v1'
+        logger.step("Initializing Jarvis...")
         
         # Initialize main assistant
+        logger.step("Loading main Jarvis assistant...")
         self.assistant = JarvisAssistant(llm="llama-3.1-8b-instant")
+        logger.success("Jarvis assistant loaded")
         
         # Initialize domain agents
+        logger.step("Loading domain agents...")
         self.finance = FinanceAgent()
+        logger.tool("FinanceAgent loaded")
         self.research = ResearchAgent()
+        logger.tool("ResearchAgent loaded")
         self.worklife = WorkLifeAgent()
+        logger.tool("WorkLifeAgent loaded")
         self.health = HealthAgent()
+        logger.tool("HealthAgent loaded")
         self.search = SearchAgent()
+        logger.tool("SearchAgent loaded")
         self.news_summary = NewsSummaryAgent()
+        logger.tool("NewsSummaryAgent loaded")
         self.documentation = DocAgent()
+        logger.tool("DocumentationAgent loaded")
         self.planner = TodoPlanner()
+        logger.tool("PlannerAgent loaded")
         
         # Memory
+        logger.step("Initializing memory system...")
         self.memory = MemoryManager()
         self.memory.initialize()
+        logger.success("4-tier memory initialized")
         
         # Agent Registry
         self.registry = registry
+        logger.success(f"Agent registry: {len(self.registry.get_all_agents())} agents")
         
         # User Profile
         self.profile = profile
@@ -70,22 +134,18 @@ class Jarvis:
         if self.profile.is_jarvis_mode():
             self._jarvis_status_report()
         
-        print(f"\n📋 Available Agents: {len(self.registry.get_all_agents())}")
+        logger.step(f"Available agents: {len(self.registry.get_all_agents())}")
         for name, info in self.registry.get_all_agents().items():
-            print(f"  - {name}: {info['description'][:60]}...")
+            print(f"  • {name}")
     
     def _jarvis_status_report(self):
-        """Display JARVIS-style status report"""
         from datetime import datetime
         now = datetime.now()
         hour = now.hour
-        
         time_greeting = "Good morning" if 6 <= hour < 12 else "Good afternoon" if 12 <= hour < 18 else "Good evening"
-        
         name = self.profile.get_name()
         print(f"🤖 {time_greeting}, {name}.")
         print(f"   It's {now.strftime('%I:%M %A')}")
-        
         import random
         statuses = [
             "Systems online. All subsystems operational.",
@@ -96,150 +156,117 @@ class Jarvis:
         ]
         print(f"   {random.choice(statuses)}")
     
-    def _format_jarvis_response(self, response: str) -> str:
-        """Format response in JARVIS style"""
-        if not self.profile.is_jarvis_mode():
-            return response
-        
-        user = self.profile.get_name()
-        
-        # Add JARVIS-style openings occasionally
-        if not response.startswith(("At ", "Very ", "Indeed", "I ", "The ", "As ")):
-            openings = [
-                f"Very well, {user}. ",
-                f"Of course, {user}. ",
-                f"Understood, {user}. ",
-                f"Certainly, {user}. ",
-            ]
-            import random
-            if random.random() < 0.3:
-                response = random.choice(openings) + response[0].lower() + response[1:]
-        
-        return response
-    
     def route_task(self, message: str) -> str:
-        """Route message to appropriate agent"""
-        # Extract the actual user message (before Context: prefix)
+        """Route message with verbose logging"""
+        
+        # Extract actual message
         if "\n\nContext:" in message:
             actual_message = message.split("\n\nContext:")[0]
             msg_lower = actual_message.lower()
         else:
             msg_lower = message.lower()
         
-        # URL detection FIRST - fetch web pages
+        logger.step(f"Processing: '{message[:50]}...'")
+        
+        # Check custom memory first
+        relevant_memories = []
+        if self.memory.ltm.count() > 0:
+            logger.memory("Searching memory...")
+            results = self.memory.search_memory(message, n_results=3)
+            for r in results:
+                dist = r.get('distance', 999)
+                if dist < 1.3 or 'User memory:' in r['text']:
+                    clean = r['text'].replace("User memory: ", "").replace("User preference: ", "")[:80]
+                    relevant_memories.append(clean)
+                    if len(relevant_memories) >= 1:
+                        break
+            if relevant_memories:
+                logger.success(f"Found {len(relevant_memories)} memory match(es)")
+        
+        # === ROUTING LOGIC ===
+        
+        # URL detection
         if 'http://' in message or 'https://' in message:
+            logger.agent("Routing to: SearchAgent (URL detected)")
             return self._handle_search(message)
         
-        # Search keywords FIRST (before news/other)
+        # Search
         if any(k in msg_lower for k in ['search', 'find', 'look up', 'google', 'web']):
+            logger.agent("Routing to: SearchAgent")
+            logger.tool("Using: Web search tool")
             return self._handle_search(message)
         
-        # News Summary keywords - BEFORE general news
+        # News Summary
         if any(k in msg_lower for k in ['news summary', 'news slides', 'create presentation', '10 slides', 'news presentation', 'summarize news']):
+            logger.agent("Routing to: NewsSummaryAgent")
             return self._handle_news_summary(message)
         
-        # Planner keywords (create todo, plan, make plan)
+        # Planner
         if any(k in msg_lower for k in ['create todo', 'make todo', 'add todo', 'plan', 'make plan', 'create plan', 'planning', 'create list', 'add to my list']):
+            logger.agent("Routing to: PlannerAgent")
             return self._handle_planner(message)
         
-        # Documentation Agent keywords
+        # Documentation
         if any(k in msg_lower for k in ['documentation', 'doc', 'how to', 'example', 'help me build', 'create agent', 'show me code', 'reference']):
+            logger.agent("Routing to: DocumentationAgent")
             return self._handle_documentation(message)
         
-        # Personalization commands - more specific patterns first
+        # Personalization
         if any(k in msg_lower for k in ['my name is', 'call me']):
-            return self._handle_set_name(message)
-        
-        if ' i am ' in msg_lower and 'interested' not in msg_lower:
+            logger.agent("Routing to: UserProfile (name setting)")
             return self._handle_set_name(message)
         
         if any(k in msg_lower for k in ['personality', 'be my', 'act as', 'behave']):
+            logger.agent("Routing to: UserProfile (personality)")
             return self._handle_set_personality(message)
         
-        if any(k in msg_lower for k in ['prefer', 'i like', 'i want', 'settings', 'configure']):
-            return self._handle_set_preferences(message)
-        
-        if 'profile' in msg_lower or 'about me' in msg_lower:
-            return self._handle_show_profile(message)
-        
-        # JARVIS quick responses ONLY for simple greetings
-        if self.profile.is_jarvis_mode():
-            if msg_lower.strip() == 'hi' or msg_lower.strip() == 'hi.':
-                return f"At your service, {self.profile.get_name()}."
-            elif msg_lower.strip() == 'hello' or msg_lower.strip() == 'hello.':
-                return f"Good day, {self.profile.get_name()}. How may I assist you?"
-            elif msg_lower.strip() == 'how are you' or msg_lower.strip() == 'how are you?':
-                return "All systems operational. Thank you for asking, sir."
-        
-        # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
-        remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
-        if any(k in msg_lower for k in remember_patterns):
-            # Store to custom LTM (ChromaDB)
-            self._store_to_ltm(message, "")
-            return "Got it! I've stored that in my memory. You can ask me to remember things and I'll store them persistently."
-        
-        # MEMORY QUERIES - Let LLM agent handle (has built-in memory)
-        # Pass to assistant - PraisonAI built-in memory will handle it
-        # BUT also search custom LTM as context
-        
-        # Finance keywords
-        if any(k in msg_lower for k in ['stock', 'share', 'portfolio', 'crypto', 'invest', 'price', 'trading', 'aapl', 'googl', 'msft', 'tsla']):
-            return self._handle_finance(message)
-        
-        # Research keywords
-        elif any(k in msg_lower for k in ['research', 'paper', 'academic', 'study', 'find information', 'arxiv', 'pubmed']):
-            return self._handle_research(message)
-        
-        # Work-Life keywords
-        elif any(k in msg_lower for k in ['weather', 'task', 'todo', 'time', 'holiday', 'calendar']):
-            return self._handle_worklife(message)
-        
-        # News only (without search keyword)
-        elif 'news' in msg_lower:
-            return self._handle_worklife(message)
-        
-        # Health keywords
-        elif any(k in msg_lower for k in ['health', 'weight', 'exercise', 'sleep', 'mood', 'bmi', 'water', 'symptom']):
-            return self._handle_health(message)
-        
-        # === PATTERN DETECTION ===
-        # Pattern keywords
+        # === PATTERN DETECTION WITH LOGGING ===
         if any(k in msg_lower for k in ['parallel', 'simultaneously', 'at the same time']):
+            logger.pattern("Detected: Parallel Execution pattern")
             from src.agents.advanced.parallel_execution import ParallelAgents
             return ParallelAgents().process(message)
         
         if any(k in msg_lower for k in ['loop', 'iterate', 'each item', 'for each']):
+            logger.pattern("Detected: Loop/Iteration pattern")
             from src.agents.advanced.loop_iteration import LoopAgents
             return LoopAgents().process(message)
         
         if any(k in msg_lower for k in ['async', 'background', 'fire and forget']):
+            logger.pattern("Detected: Async/Background pattern")
             from src.agents.advanced.async_tasks import AsyncAgents
             return AsyncAgents().process(message)
         
         if any(k in msg_lower for k in ['reflect', 'review', 'improve', 'self-critique']):
+            logger.pattern("Detected: Self Reflection pattern")
             from src.agents.advanced.self_reflection import SelfReflectingAgent
             return SelfReflectingAgent().process(message)
         
         if any(k in msg_lower for k in ['structured', 'json', 'format as']):
+            logger.pattern("Detected: Structured Output pattern")
             from src.agents.advanced.structured_output import StructuredOutputAgent
             return StructuredOutputAgent().process(message)
         
         if any(k in msg_lower for k in ['policy', 'rules', 'enforce', 'check policy']):
+            logger.pattern("Detected: Policy Engine pattern")
             from src.agents.advanced.policy_engine import PolicyEngine
             return PolicyEngine().process(message)
         
-        # === MCP TOOL DETECTION ===
+        # === MCP TOOLS ===
         mcp_tools = get_mcp_tools()
         
         # Memory MCP
         if any(k in msg_lower for k in ['remember this', 'store this', 'save to memory']):
-            return mcp_tools['memory'].set(msg_lower.split('remember')[1].split('to')[0].strip() if 'remember' in msg_lower else message, message)
+            logger.tool("Using: Memory MCP (store)")
+            key = msg_lower.split('remember')[1].split('to')[0].strip() if 'remember' in msg_lower else message
+            return mcp_tools['memory'].set(key, message)
         
         if any(k in msg_lower for k in ['what do you remember', 'show memories', 'list memory']):
+            logger.tool("Using: Memory MCP (list)")
             return mcp_tools['memory'].list_keys()
         
         # Time MCP
         if any(k in msg_lower for k in ['what time', 'current time', 'time in']):
+            logger.tool("Using: Time MCP")
             tz = "UTC"
             if 'in' in msg_lower:
                 tz = msg_lower.split('in')[-1].strip()
@@ -247,107 +274,91 @@ class Jarvis:
         
         # GitHub MCP
         if any(k in msg_lower for k in ['search github', 'find repo', 'github search']):
+            logger.tool("Using: GitHub MCP")
             query = msg_lower.replace('search github', '').replace('find repo', '').replace('github search', '').strip()
             return mcp_tools['github'].search_repos(query)
         
-        # FileSystem MCP  
-        if msg_lower.strip().startswith('ls') or 'list files' in msg_lower or 'show directory' in msg_lower or 'show files' in msg_lower:
+        # Filesystem MCP
+        if msg_lower.strip().startswith('ls') or 'list files' in msg_lower or 'show directory' in msg_lower:
+            logger.tool("Using: Filesystem MCP")
             path = "."
             if 'in' in msg_lower:
                 path = msg_lower.split('in')[-1].strip()
-            elif len(msg_lower.split()) > 1:
-                path = msg_lower.split(maxsplit=1)[1].strip()
             return mcp_tools['filesystem'].list_dir(path)
         
-        # Default to main assistant (with built-in PraisonAI memory + session)
+        # === DOMAIN AGENTS ===
+        
+        # Finance
+        if any(k in msg_lower for k in ['stock', 'share', 'portfolio', 'crypto', 'invest', 'price', 'trading', 'aapl', 'googl', 'msft', 'tsla']):
+            logger.agent("Routing to: FinanceAgent")
+            return self._handle_finance(message)
+        
+        # Research
+        elif any(k in msg_lower for k in ['research', 'paper', 'academic', 'study', 'find information', 'arxiv', 'pubmed']):
+            logger.agent("Routing to: ResearchAgent")
+            return self._handle_research(message)
+        
+        # Work-Life
+        elif any(k in msg_lower for k in ['weather', 'task', 'todo', 'time', 'holiday', 'calendar']):
+            logger.agent("Routing to: WorkLifeAgent")
+            return self._handle_worklife(message)
+        
+        # News
+        elif 'news' in msg_lower:
+            logger.agent("Routing to: WorkLifeAgent (news)")
+            return self._handle_worklife(message)
+        
+        # Health
+        elif any(k in msg_lower for k in ['health', 'weight', 'exercise', 'sleep', 'mood', 'bmi', 'water', 'symptom']):
+            logger.agent("Routing to: HealthAgent")
+            return self._handle_health(message)
+        
+        # === DEFAULT: Jarvis Main Assistant ===
         else:
-            # Check custom LTM for relevant context and pass to LLM
-            custom_memory_context = ""
-            if self.memory.ltm.count() > 0:
-                # Try multiple search approaches
-                results = []
-                
-                # 1. Direct search
-                direct_results = self.memory.search_memory(message, n_results=10)
-                results.extend(direct_results)
-                
-                # 2. Extract key nouns and search (for "favorite X" patterns)
-                msg_lower = message.lower()
-                if 'favorite' in msg_lower or 'my fav' in msg_lower:
-                    # Extract what they're asking about
-                    import re
-                    match = re.search(r'favorite\s+(\w+)', msg_lower)
-                    if match:
-                        topic = match.group(1)
-                        topic_results = self.memory.search_memory(topic, n_results=10)
-                        results.extend(topic_results)
-                
-                # Get unique results with good similarity
-                seen = set()
-                relevant_memories = []
-                for r in results:
-                    text = r['text']
-                    if text in seen:
-                        continue
-                    
-                    dist = r.get('distance', 999)
-                    # Accept if: good distance OR explicit memory
-                    if dist < 1.4 or 'User memory:' in text or 'explicitly remembered' in text:
-                        clean_text = text.replace("User memory: ", "").replace("User preference: ", "").replace("User explicitly remembered: ", "")
-                        relevant_memories.append(clean_text)
-                        seen.add(text)
-                    
-                    if len(relevant_memories) >= 3:
-                        break
-                
-                if relevant_memories:
-                    custom_memory_context = "\n\n[Your persistent memories: " + " | ".join(relevant_memories[:3]) + "]"
-            
-            # Build system prompt for JARVIS style if in JARVIS mode
+            logger.agent("Routing to: Jarvis (main assistant)")
             if self.profile.is_jarvis_mode():
-                name = self.profile.get_name()
-                
-                # Include memory context in the prompt
-                memory_info = ""
-                if relevant_memories:
-                    memory_info = f"\n\nUser's known information: " + " | ".join(relevant_memories[:3])
-                
-                system_prefix = f"""You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), Tony Stark's AI assistant from Iron Man.
+                logger.thinking("Using JARVIS personality")
+            
+            # Build context
+            memory_info = ""
+            if relevant_memories:
+                memory_info = f" Known: {relevant_memories[0][:60]}"
+            
+            system_prefix = f"""J.A.R.V.I.S. - Reply as Tony Stark's AI. Formal, brief, add "sir". {memory_info}
 
-IMPORTANT: Respond EXACTLY like J.A.R.V.I.S. from the Iron Man movies. 
-
-Rules:
-- Use formal, polished speech like "At your service, sir" or "Very well" or "Working on it, sir"
-- Be efficient and concise, not overly verbose  
-- Add "sir" when appropriate
-- Never say things like "I'm an AI language model" or "As an AI"
-- Use the user's known information to personalize responses
-- Be loyal and ready to serve
-- Never break character
-
-{memory_info}
-
-User is asking: {message}
+User: {message[:200]}
 """
-                response = self.assistant.start(system_prefix)
-            else:
-                response = self.assistant.start(message + custom_memory_context)
             
-            # Apply JARVIS formatting
-            if self.profile.is_jarvis_mode():
-                response = self._format_jarvis_response(response)
+            start_time = time.time()
+            response = self.assistant.start(system_prefix)
+            elapsed = time.time() - start_time
             
+            logger.success(f"Response generated in {elapsed:.2f}s")
             return response
+    
+    def _format_jarvis_response(self, response: str) -> str:
+        if not self.profile.is_jarvis_mode():
+            return response
+        user = self.profile.get_name()
+        if not response.startswith(("At ", "Very ", "Indeed", "I ", "The ", "As ")):
+            import random
+            openings = [
+                f"Very well, {user}. ",
+                f"Of course, {user}. ",
+                f"Understood, {user}. ",
+                f"Certainly, {user}. ",
+            ]
+            if random.random() < 0.3:
+                response = random.choice(openings) + response[0].lower() + response[1:]
+        return response
     
     def _handle_finance(self, message: str) -> str:
         msg = message.lower()
         if 'portfolio' in msg or 'my holding' in msg:
             return self.finance.check_portfolio()
         elif 'add' in msg:
-            # Extract symbol, quantity, price
             return "To add a holding, say: 'Add 10 shares of AAPL at 150'"
         else:
-            # Extract stock symbol
             import re
             symbols = re.findall(r'\b[A-Z]{2,5}\b', message)
             if symbols:
@@ -380,38 +391,23 @@ User is asking: {message}
             return self.health.quick_tip()
     
     def _handle_news_summary(self, message: str) -> str:
-        """Handle news summary and presentation requests"""
         import re
         msg_lower = message.lower()
-        
-        # Extract topic from message
-        # Patterns like "news summary about X" or "news slides for X"
-        topic = "technology"  # default
-        
-        # Try to extract topic
+        topic = "technology"
         patterns = [
             r'news\s+(?:summary|slides)\s+(?:about|for|on)?\s*(\w+)',
             r'create\s+(?:news|presentation)\s+(?:about|for)?\s*(\w+)',
-            r'summarize\s+(?:news|about)\s*(\w+)',
-            r'(\w+)\s+news\s+(?:summary|slides)',
         ]
-        
         for pattern in patterns:
             match = re.search(pattern, msg_lower)
             if match:
                 topic = match.group(1)
                 break
-        
-        # Remove trigger words to get the topic
         for word in ['news summary', 'news slides', 'create presentation', 'summarize', 'about', 'for']:
             if word in msg_lower:
                 topic = msg_lower.split(word)[-1].strip()
                 break
-        
-        # Run the news summary agent
         result = self.news_summary.run(topic, "news_summary.md")
-        
-        # Read the generated file
         try:
             with open("news_summary.md", "r") as f:
                 content = f.read()
@@ -420,80 +416,55 @@ User is asking: {message}
             return result
     
     def _handle_planner(self, message: str) -> str:
-        """Handle todo planning requests"""
         import re
         msg_lower = message.lower()
-        
-        # Extract topic - look for "for X" or "to X" pattern
         topic = None
         for word in ['create todo for', 'make todo for', 'plan for', 'create plan for', 'create list for', 'add to my list']:
             if word in msg_lower:
                 topic = msg_lower.split(word)[-1].strip()
                 break
-        
-        # Also try "about" pattern
         if not topic and 'about' in msg_lower:
             topic = msg_lower.split('about')[-1].strip()
-        
         if not topic:
-            # Try to extract from message
             match = re.search(r'(?:todo|plan|list)\s+(?:for|to|about)?\s*(.+)', msg_lower)
             if match:
                 topic = match.group(1).strip()
-        
         if not topic:
             return "What would you like to plan? Say 'create todo for [topic]' or 'make a plan for [topic]'"
-        
-        # Handle list/show todos
         if 'show' in msg_lower or 'list' in msg_lower or 'my todos' in msg_lower or 'view' in msg_lower:
             return self.planner.list_todos()
-        
-        # Handle complete todo
         if 'complete' in msg_lower or 'done' in msg_lower or 'finish' in msg_lower:
             match = re.search(r'(\d+)', message)
             if match:
                 todo_id = int(match.group(1))
                 return self.planner.complete_todo(todo_id)
-        
-        # Create new todo
         try:
             return self.planner.plan_and_create_todo(topic)
         except Exception as e:
             return f"Error creating todo: {str(e)}"
     
     def _handle_documentation(self, message: str) -> str:
-        """Handle documentation and code example requests"""
         import re
         msg_lower = message.lower()
-        
-        # Extract the topic from message
-        # Patterns: "help me build X", "show me example for X", "documentation for X"
         patterns = [
             r'(?:show me|help me|find|get)\s+(?:example\s+)?(?:for|about)?\s+(\w+)',
             r'documentation\s+(?:for|about)?\s+(\w+)',
             r'doc\s+(?:for|about)?\s+(\w+)',
             r'how to\s+(\w+)',
-            r'reference\s+(?:for|about)?\s+(\w+)',
         ]
-        
-        topic = "agent"  # default
+        topic = "agent"
         for pattern in patterns:
             match = re.search(pattern, msg_lower)
             if match:
                 topic = match.group(1)
                 break
-        
-        # If no pattern matched, try last resort
         if topic == "agent":
             for word in ['agent', 'workflow', 'memory', 'mcp', 'serve', 'tool']:
                 if word in msg_lower:
                     topic = word
                     break
-        
-        # Run the documentation agent
         try:
             result = self.documentation.search_documentation(topic)
-            # Limit response length
             if len(result) > 1500:
                 return f"📚 Documentation for '{topic}':\n\n{result[:1500]}...\n\nSee full result in docs or run again."
             return f"📚 Documentation for '{topic}':\n\n{result}"
@@ -501,32 +472,22 @@ User is asking: {message}
             return f"Documentation Agent error: {str(e)}. Try: 'show me example for agent' or 'help me build workflow'"
     
     def _handle_set_name(self, message: str) -> str:
-        """Handle setting user's name"""
         import re
         msg_lower = message.lower()
-        
-        patterns = [
-            r'my name is (\w+)',
-            r'call me (\w+)',
-        ]
-        
+        patterns = [r'my name is (\w+)', r'call me (\w+)']
         name = None
         for pattern in patterns:
             match = re.search(pattern, msg_lower)
             if match:
                 name = match.group(1).capitalize()
                 break
-        
         if not name:
             return "What would you like me to call you?"
-        
         self.profile.set_name(name)
         return f"✅ Got it! I'll call you {name} from now on. Nice to meet you!"
     
     def _handle_set_personality(self, message: str) -> str:
-        """Handle personality mode changes"""
         msg_lower = message.lower()
-        
         if 'friend' in msg_lower or 'friendly' in msg_lower:
             self.profile.set_personality_mode("friend")
             return "😊 Got it! I'll be your friendly companion from now on."
@@ -536,258 +497,50 @@ User is asking: {message}
         elif 'professional' in msg_lower or 'assistant' in msg_lower:
             self.profile.set_personality_mode("assistant")
             return "💼 Got it! I'll be your professional assistant from now on."
-        elif 'companion' in msg_lower:
-            self.profile.set_personality_mode("companion")
-            return "🤝 Got it! I'll be your companion from now on."
         elif 'jarvis' in msg_lower or 'iron man' in msg_lower or 'tony' in msg_lower:
             self.profile.set_personality_mode("jarvis")
             return "😎 At your service, sir. Initializing JARVIS personality protocol. How may I assist you today?"
         else:
-            return "I can be: JARVIS (Iron Man's AI), Assistant (professional), Companion (friendly), Teacher (educational), or Friend (casual). Which would you like?"
-    
-    def _handle_set_preferences(self, message: str) -> str:
-        """Handle user preference settings"""
-        msg_lower = message.lower()
-        
-        # Communication style
-        if 'brief' in msg_lower or 'short' in msg_lower:
-            self.profile.set_preference("response_length", "short")
-            return "✅ I'll give you brief, concise responses."
-        elif 'detailed' in msg_lower or 'long' in msg_lower:
-            self.profile.set_preference("response_length", "long")
-            return "✅ I'll give you detailed responses with more information."
-        elif 'balanced' in msg_lower:
-            self.profile.set_preference("response_length", "medium")
-            return "✅ I'll balance between brief and detailed."
-        
-        # Formality
-        if 'formal' in msg_lower:
-            self.profile.set_preference("formality", "formal")
-            return "✅ I'll be more formal in my responses."
-        elif 'casual' in msg_lower:
-            self.profile.set_preference("formality", "casual")
-            return "✅ I'll be more casual and friendly."
-        
-        # Interests
-        if 'interested in' in msg_lower or 'like' in msg_lower:
-            # Extract topic
-            for word in ['interested in', 'like', 'love', 'enjoy']:
-                if word in msg_lower:
-                    topic = msg_lower.split(word)[-1].strip().strip('.')
-                    if topic:
-                        self.profile.add_interest(topic)
-                        return f"✅ Added '{topic}' to your interests!"
-        
-        return "I understand preferences like: brief/detailed responses, formal/casual style. Say 'I'm interested in [topic]' to add interests."
-    
-    def _handle_show_profile(self, message: str) -> str:
-        """Show user profile"""
-        name = self.profile.get_name()
-        mode = self.profile.get_preference("personality_mode", "assistant")
-        style = self.profile.get_preference("response_length", "medium")
-        interests = self.profile.profile.get("interests", [])
-        conv_count = self.profile.profile.get("conversation_count", 0)
-        
-        return f"""👤 Your Jarvis Profile:
-
-📛 Name: {name}
-🤖 Personality: {mode}
-📝 Response style: {style}
-💬 Conversations: {conv_count}
-⭐ Interests: {', '.join(interests) if interests else 'None yet'}
-
-Say 'my name is [Name]' to change your name.
-Say 'be my friend' to change personality.
-Say 'prefer brief responses' to adjust style."""
+            return "I can be: JARVIS (Iron Man's AI), Assistant (professional), Companion (friendly), Teacher (educational), or Friend (casual). Which would you prefer?"
     
     def _handle_search(self, message: str) -> str:
-        # Check if it's a URL
         if 'http://' in message or 'https://' in message:
-            # Extract URL and fetch content
             import re
             urls = re.findall(r'https?://[^\s]+', message)
             if urls:
                 return self.search.fetch(urls[0])
-        
         query = message.replace('search', '').replace('find', '').replace('research about', '').strip()
         return self.search.quick_search(query)
     
-    def _handle_memory_query(self, message: str) -> str:
-        """Handle queries about user's stored memories"""
-        msg_lower = message.lower()
-        
-        # Extract the query topic
-        query = message.lower()
-        memory_phrases = ["what is my", "what's my", "tell me about my", "remember my", "where do i", "where am i", "what do i like", "who am i"]
-        for phrase in memory_phrases:
-            if phrase in query:
-                query = query.split(phrase, 1)[1].strip()
-                break
-        
-        # If query is short, also search with full message for better matching
-        if len(query) < 5:
-            search_queries = [query, message.lower()]
-        else:
-            search_queries = [query]
-        
-        # Search LTM for relevant memories
-        results = []
-        for sq in search_queries:
-            r = self.memory.search_memory(sq, n_results=10)
-            for item in r:
-                # Only accept results with good similarity (distance < 1.2)
-                if item.get('distance', 999) < 1.2:
-                    if item not in results:
-                        results.append(item)
-        
-        # Fallback: if no good results, do keyword search on all LTM
-        if not results:
-            all_ltm = self.memory.ltm.get_all(limit=50)
-            query_words = set(query.lower().split())
-            for item in all_ltm:
-                text_lower = item['text'].lower()
-                if any(word in text_lower for word in query_words if len(word) > 2):
-                    results.append(item)
-                    if len(results) >= 5:
-                        break
-        
-        # Also get entities
-        entities = self.memory.entity.get_entities()
-        entity_info = []
-        for e in entities[:5]:
-            attrs = e.attributes if hasattr(e, 'attributes') else {}
-            entity_info.append(f"{e.name}: {attrs}")
-        
-        if results or entity_info:
-            lines = ["📝 Here's what I remember:"]
-            
-            # Add LTM results
-            for r in results:
-                text = r['text']
-                # Clean up the text
-                text = text.replace("User preference: ", "").replace("User explicitly remembered: ", "").replace("User memory: ", "")
-                lines.append(f"• {text}")
-            
-            # Add entity info
-            if entity_info:
-                lines.append("\n👤 Known about you:")
-                for e in entity_info[:3]:
-                    lines.append(f"  - {e}")
-            
-            return "\n".join(lines)
-        else:
-            # No memories found
-            return "I don't have any stored memories about that. You can say 'Remember that...' to store something!"
-    
-    def _extract_entities(self, message: str) -> None:
-        """Extract and track named entities from message"""
-        import re
-        # Extract capitalized words (potential names/entities)
-        potential_entities = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', message)
-        
-        # Common entity types to track
-        entity_keywords = {
-            'person': ['i am', 'my name is', 'called'],
-            'company': ['company', 'work at', 'working at', 'employer'],
-            'location': ['live in', 'located in', 'city', 'country'],
-            'preference': ['i like', 'i prefer', 'i love', 'hate', 'favorite'],
-        }
-        
-        msg_lower = message.lower()
-        
-        for entity in potential_entities[:3]:
-            if len(entity) > 2:
-                # Determine entity type
-                entity_type = 'unknown'
-                for etype, keywords in entity_keywords.items():
-                    if any(k in msg_lower for k in keywords):
-                        entity_type = etype
-                        break
-                
-                # Add to entity memory
-                self.memory.add_entity(entity, entity_type, {'source': 'chat'})
-    
-    def _store_to_ltm(self, message: str, response: str) -> None:
-        """Store important information to LTM for semantic search"""
-        msg_lower = message.lower()
-        
-        # DON'T store questions - they pollute memory
-        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who'):
-            return
-        
-        # EXPLICIT REMEMBER COMMANDS
-        if 'remember' in msg_lower or 'memorize' in msg_lower or 'don\'t forget' in msg_lower:
-            # Extract what to remember (everything after remember)
-            remember_text = message
-            if 'remember' in msg_lower:
-                remember_text = message.lower().split('remember', 1)[1].strip()
-            elif 'memorize' in msg_lower:
-                remember_text = message.lower().split('memorize', 1)[1].strip()
-            elif 'don\'t forget' in msg_lower:
-                remember_text = message.lower().split('don\'t forget', 1)[1].strip()
-            
-            if remember_text and remember_text != message.lower():
-                # Add context for better semantic search
-                enriched_text = f"User memory: {remember_text}"
-                self.memory.add_to_memory(
-                    enriched_text,
-                    metadata={'type': 'explicit_memory', 'source': 'chat'}
-                )
-            return
-        
-        # Store user preferences ONLY for factual statements (not questions)
-        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'i hate']
-        if any(k in msg_lower for k in preference_patterns):
-            # Make sure it's a statement, not a question
-            if '?' not in message and 'what' not in msg_lower[:10]:
-                self.memory.add_to_memory(
-                    f"User preference: {message}",
-                    metadata={'type': 'preference', 'source': 'chat'}
-                )
-        
-        # Store important facts from responses
-        if 'portfolio' in msg_lower or 'holdings' in msg_lower:
-            self.memory.add_to_memory(
-                f"Finance query: {response[:200]}",
-                metadata={'type': 'finance', 'source': 'chat'}
-            )
-        
-        # Store research topics
-        if any(k in msg_lower for k in ['research', 'learn', 'understand']):
-            self.memory.add_to_memory(
-                f"Research topic: {message}",
-                metadata={'type': 'research', 'source': 'chat'}
-            )
-    
     def chat(self, message: str) -> str:
         """Main chat method with full 4-tier memory integration"""
-        # 1. Store in STM (Short-Term Memory)
+        
+        print(f"\n{'='*50}")
+        print(f"📥 INPUT: {message[:60]}{'...' if len(message) > 60 else ''}")
+        print(f"{'='*50}")
+        
+        # Store in STM
         self.memory.add_message('user', message)
         
-        # 2. Extract entities (Entity Memory)
+        # Extract entities
         self._extract_entities(message)
         
-        # 3. Get context from LTM for better response
-        ltm_context = ""
-        if self.memory.ltm.count() > 0:
-            results = self.memory.search_memory(message, n_results=2)
-            if results:
-                ltm_context = "Previous relevant info: " + " | ".join([r['text'][:100] for r in results])
+        # Route and get response
+        start_total = time.time()
+        response = self.route_task(message)
+        elapsed_total = time.time() - start_total
         
-        # 4. Get response (with LTM context if available)
-        if ltm_context:
-            enhanced_message = f"{message}\n\nContext: {ltm_context}"
-            response = self.route_task(enhanced_message)
-        else:
-            response = self.route_task(message)
+        print(f"\n{'='*50}")
+        print(f"⏱️ Total processing time: {elapsed_total:.2f}s")
+        print(f"{'='*50}")
         
-        # 5. Store to LTM for semantic search
+        # Store to LTM
         self._store_to_ltm(message, response)
         
-        # 6. Store in STM (assistant response)
+        # Store in STM (assistant)
         self.memory.add_message('assistant', response)
         
-        # 7. Track in Episodic Memory
+        # Track in Episodic
         self.memory.track_interaction(
             user_input=message,
             response=response[:500] if len(response) > 500 else response,
@@ -795,32 +548,89 @@ Say 'prefer brief responses' to adjust style."""
             metadata={'source': 'interactive'}
         )
         
-        # 8. Format in JARVIS style if active
+        # Format in JARVIS style
         response = self._format_jarvis_response(response)
         
         return response
     
+    def _extract_entities(self, message: str) -> None:
+        import re
+        potential_entities = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', message)
+        entity_keywords = {
+            'person': ['i am', 'my name is', 'called'],
+            'company': ['company', 'work at', 'working at', 'employer'],
+            'location': ['live in', 'located in', 'city', 'country'],
+            'preference': ['i like', 'i prefer', 'i love', 'hate', 'favorite'],
+        }
+        msg_lower = message.lower()
+        for entity in potential_entities[:3]:
+            if len(entity) > 2:
+                entity_type = 'unknown'
+                for etype, keywords in entity_keywords.items():
+                    if any(k in msg_lower for k in keywords):
+                        entity_type = etype
+                        break
+                self.memory.add_entity(entity, entity_type, {'source': 'chat'})
+    
+    def _store_to_ltm(self, message: str, response: str) -> None:
+        msg_lower = message.lower()
+        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who'):
+            return
+        if 'remember' in msg_lower or 'memorize' in msg_lower or 'don\'t forget' in msg_lower:
+            remember_text = message
+            if 'remember' in msg_lower:
+                remember_text = message.lower().split('remember', 1)[1].strip()
+            elif 'memorize' in msg_lower:
+                remember_text = message.lower().split('memorize', 1)[1].strip()
+            elif 'don\'t forget' in msg_lower:
+                remember_text = message.lower().split('don\'t forget', 1)[1].strip()
+            if remember_text and remember_text != message.lower():
+                enriched_text = f"User memory: {remember_text}"
+                self.memory.add_to_memory(enriched_text, metadata={'type': 'explicit_memory', 'source': 'chat'})
+            return
+        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'i hate']
+        if any(k in msg_lower for k in preference_patterns):
+            if '?' not in message and 'what' not in msg_lower[:10]:
+                self.memory.add_to_memory(f"User preference: {message}", metadata={'type': 'preference', 'source': 'chat'})
+        if 'portfolio' in msg_lower or 'holdings' in msg_lower:
+            self.memory.add_to_memory(f"Finance query: {response[:200]}", metadata={'type': 'finance', 'source': 'chat'})
+        if any(k in msg_lower for k in ['research', 'learn', 'understand']):
+            self.memory.add_to_memory(f"Research topic: {message}", metadata={'type': 'research', 'source': 'chat'})
+    
     def help(self) -> str:
-        """Get help with available commands using registry"""
         return f"""🎯 Jarvis Commands:
 
-{self.registry.get_capabilities_summary()}
+Agent Routing:
+- Finance: stock, crypto, portfolio, invest
+- Research: research, paper, academic, study
+- Health: health, weight, exercise, sleep, bmi
+- Work-Life: weather, tasks, news, calendar
+
+Patterns (use these keywords):
+- "parallel" → Parallel Execution
+- "loop" → Loop/Iteration  
+- "async" → Background Tasks
+- "reflect" → Self Reflection
+- "structured" → JSON Output
+- "policy" → Policy Engine
+
+MCP Tools:
+- "remember X" → Store to memory
+- "what time" → Get current time
+- "search github X" → GitHub search
+- "ls" or "list files" → Filesystem
 
 Personalization:
-- "My name is [Name]" - Set your name
-- "Be my friend/teacher/assistant" - Change personality
-- "I prefer brief/detailed responses" - Adjust style
-- "I'm interested in [topic]" - Add interests
-- "Profile" or "About me" - View your profile
+- "My name is X" → Set name
+- "Be my friend/teacher/jarvis" → Change personality
+- "Profile" → View profile
 
-General:
-- Just chat normally! 🤖"""
+Just chat normally! 🤖"""
 
 
 def main():
-    """Interactive Jarvis chat"""
     print("\n" + "="*50)
-    print("🤖 JARVIS - AI ASSISTANT")
+    print("🤖 JARVIS - AI ASSISTANT (Enhanced Logging)")
     print("="*50)
     print("Type 'help' for commands or 'quit' to exit\n")
     
@@ -845,15 +655,11 @@ def main():
                 print(f"Memory: {jarvis.memory.get_stats()}")
                 continue
             
-            # Get Jarvis response
             response = jarvis.chat(user_input)
             
-            # Show FULL response (no truncation)
+            # Clean response
+            lines = response.split('\n\n')
             clean = response
-            
-            # Remove any box-drawing characters that are debug output
-            clean = clean.replace('╭─', '').replace('╰─', '').replace('│', '')
-            clean = clean.replace('Task', '').replace('Agent', '').replace('Response', '')
             
             print(f"\n🤖 Jarvis: {clean}\n")
             
