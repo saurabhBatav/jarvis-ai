@@ -17,6 +17,7 @@ load_dotenv(env_path, override=True)  # override shell env vars
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
 from src.agents.domain.news_summary import NewsSummaryAgent
+from src.agents.domain.planner import TodoPlanner
 from src.agents.documentation.doc_agent import DocAgent
 from src.agents.registry import registry
 from src.memory import MemoryManager
@@ -44,6 +45,7 @@ class Jarvis:
         self.search = SearchAgent()
         self.news_summary = NewsSummaryAgent()
         self.documentation = DocAgent()
+        self.planner = TodoPlanner()
         
         # Memory
         self.memory = MemoryManager()
@@ -130,6 +132,10 @@ class Jarvis:
         # News Summary keywords - BEFORE general news
         if any(k in msg_lower for k in ['news summary', 'news slides', 'create presentation', '10 slides', 'news presentation', 'summarize news']):
             return self._handle_news_summary(message)
+        
+        # Planner keywords (create todo, plan, make plan)
+        if any(k in msg_lower for k in ['create todo', 'make todo', 'add todo', 'plan', 'make plan', 'create plan', 'planning', 'create list', 'add to my list']):
+            return self._handle_planner(message)
         
         # Documentation Agent keywords
         if any(k in msg_lower for k in ['documentation', 'doc', 'how to', 'example', 'help me build', 'create agent', 'show me code', 'reference']):
@@ -350,6 +356,48 @@ User is asking: {message}
             return f"📰 Generated 10-slide news summary for '{topic}':\n\n{content[:1500]}...\n\nSaved to: news_summary.md"
         except:
             return result
+    
+    def _handle_planner(self, message: str) -> str:
+        """Handle todo planning requests"""
+        import re
+        msg_lower = message.lower()
+        
+        # Extract topic - look for "for X" or "to X" pattern
+        topic = None
+        for word in ['create todo for', 'make todo for', 'plan for', 'create plan for', 'create list for', 'add to my list']:
+            if word in msg_lower:
+                topic = msg_lower.split(word)[-1].strip()
+                break
+        
+        # Also try "about" pattern
+        if not topic and 'about' in msg_lower:
+            topic = msg_lower.split('about')[-1].strip()
+        
+        if not topic:
+            # Try to extract from message
+            match = re.search(r'(?:todo|plan|list)\s+(?:for|to|about)?\s*(.+)', msg_lower)
+            if match:
+                topic = match.group(1).strip()
+        
+        if not topic:
+            return "What would you like to plan? Say 'create todo for [topic]' or 'make a plan for [topic]'"
+        
+        # Handle list/show todos
+        if 'show' in msg_lower or 'list' in msg_lower or 'my todos' in msg_lower or 'view' in msg_lower:
+            return self.planner.list_todos()
+        
+        # Handle complete todo
+        if 'complete' in msg_lower or 'done' in msg_lower or 'finish' in msg_lower:
+            match = re.search(r'(\d+)', message)
+            if match:
+                todo_id = int(match.group(1))
+                return self.planner.complete_todo(todo_id)
+        
+        # Create new todo
+        try:
+            return self.planner.plan_and_create_todo(topic)
+        except Exception as e:
+            return f"Error creating todo: {str(e)}"
     
     def _handle_documentation(self, message: str) -> str:
         """Handle documentation and code example requests"""

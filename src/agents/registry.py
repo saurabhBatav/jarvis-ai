@@ -108,6 +108,20 @@ class AgentRegistry:
                 "Reference agent/workflow implementations"
             ]
         )
+        
+        # Todo Planner Agent (Evaluator-Optimiser pattern)
+        self.register_agent(
+            name="PlannerAgent",
+            description="Plan and create todo lists with quality evaluation",
+            keywords=["create todo", "make todo", "add todo", "plan", "make plan", "create plan", "planning", "create list", "my todos", "show todos", "complete todo"],
+            handler_name="planner",
+            capabilities=[
+                "Create todo list for any topic",
+                "Evaluate and improve todo quality",
+                "View all todos",
+                "Mark todos as complete"
+            ]
+        )
     
     def register_agent(self, name: str, description: str, keywords: List[str], 
                        handler_name: str, capabilities: List[str]):
