@@ -190,7 +190,33 @@ class Jarvis:
             logger.agent("Routing to: SearchAgent (URL detected)")
             return self._handle_search(message)
         
-        # Search
+        # GitHub MCP - check BEFORE general search
+        if any(k in msg_lower for k in ['search github', 'find repo', 'github search', 'github repo', 'popular github', 'viral github', 'top github', 'github trending', 'github popular']):
+            logger.agent("Routing to: GitHub MCP")
+            logger.tool("Using: GitHub MCP")
+            mcp_tools = get_mcp_tools()
+            query = msg_lower
+            for word in ['search github', 'find repo', 'github search', 'github repo', 'popular github', 'viral github', 'top github', 'github trending', 'github popular', 'github', 'repository', 'repository']:
+                query = query.replace(word, '').strip()
+            if not query or query in ['popular', 'viral', 'top', 'trending']:
+                query = "artificial intelligence machine learning"
+            result = mcp_tools['github'].search_repos(query)
+            # If no token or MCP fails, use LLM fallback
+            if "not configured" in result or "Could not search" in result or "Error" in result:
+                logger.tool("GitHub MCP unavailable, using LLM fallback")
+                from src.agents.base import call_llm
+                result = call_llm(f"""Search GitHub for popular/trending repositories related to: {query}
+
+Return ONLY a numbered list (1-10) with:
+- Repository name (format: owner/repo)  
+- Number of stars
+- Brief description
+- URL
+
+Focus on recent popular AI/ML repos with high stars.""", max_tokens=800)
+            return result
+        
+        # Search (general)
         if any(k in msg_lower for k in ['search', 'find', 'look up', 'google', 'web']):
             logger.agent("Routing to: SearchAgent")
             logger.tool("Using: Web search tool")
@@ -277,11 +303,37 @@ class Jarvis:
                 tz = msg_lower.split('in')[-1].strip()
             return mcp_tools['time'].now(tz)
         
-        # GitHub MCP
-        if any(k in msg_lower for k in ['search github', 'find repo', 'github search']):
-            logger.tool("Using: GitHub MCP")
-            query = msg_lower.replace('search github', '').replace('find repo', '').replace('github search', '').strip()
-            return mcp_tools['github'].search_repos(query)
+        # GitHub MCP - more triggers and better handling
+        if any(k in msg_lower for k in ['search github', 'find repo', 'github search', 'github repo', 'popular github', 'viral github', 'top github']):
+            logger.tool("Using: GitHub MCP (searching GitHub)")
+            # Extract query - remove triggers
+            query = msg_lower
+            for word in ['search github', 'find repo', 'github search', 'github repo', 'popular github', 'viral github', 'top github', 'github', 'repository', 'repository']:
+                query = query.replace(word, '').strip()
+            
+            # If query is empty, default to AI repos
+            if not query or query in ['popular', 'viral', 'top', 'trending']:
+                query = "artificial intelligence machine learning"
+            
+            # Try MCP first
+            result = mcp_tools['github'].search_repos(query)
+            
+            # If no token, use direct API call as fallback
+            if "not configured" in result or "not found" in result:
+                logger.tool("GitHub token not found, using direct API")
+                # Use direct call via LLM
+                from src.agents.base import call_llm
+                result = call_llm(f"""Search GitHub for popular/trending repositories related to: {query}
+
+Return ONLY a numbered list (1-10) with:
+- Repository name (full format: owner/repo)
+- Number of stars
+- Brief description
+- URL
+
+Focus on recent popular repos with high stars.""", max_tokens=600)
+            
+            return result
         
         # === EXPAND COMMAND ===
         if msg_lower.strip().startswith('expand'):
