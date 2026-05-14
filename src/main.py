@@ -790,9 +790,8 @@ def main():
             # Get Jarvis response
             response = jarvis.chat(user_input)
             
-            # Clean response - take first good response only
-            lines = response.split('\n\n')
-            clean = lines[0].strip() if lines else response[:300]
+            # Show FULL response (no truncation)
+            clean = response
             
             # Remove any box-drawing characters that are debug output
             clean = clean.replace('╭─', '').replace('╰─', '').replace('│', '')
