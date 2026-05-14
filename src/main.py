@@ -17,6 +17,7 @@ load_dotenv(env_path, override=True)  # override shell env vars
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
 from src.agents.domain.news_summary import NewsSummaryAgent
+from src.agents.registry import registry
 from src.memory import MemoryManager
 
 
@@ -45,7 +46,13 @@ class Jarvis:
         self.memory = MemoryManager()
         self.memory.initialize()
         
+        # Agent Registry
+        self.registry = registry
+        
         print("✅ Jarvis initialized and ready!")
+        print(f"\n📋 Available Agents: {len(self.registry.get_all_agents())}")
+        for name, info in self.registry.get_all_agents().items():
+            print(f"  - {name}: {info['description'][:60]}...")
     
     def route_task(self, message: str) -> str:
         """Route message to appropriate agent"""
@@ -423,30 +430,10 @@ class Jarvis:
         return response
     
     def help(self) -> str:
-        return """🎯 Jarvis Commands:
+        """Get help with available commands using registry"""
+        return f"""🎯 Jarvis Commands:
 
-Finance:
-- "What's the price of AAPL?" 
-- "Check my portfolio"
-- "Add 10 shares of AAPL at 150"
-
-Research:
-- "Research quantum computing"
-- "Find papers on AI"
-
-Work-Life:
-- "What's the weather?"
-- "Show my tasks"
-- "Latest tech news"
-
-Health:
-- "Health summary"
-- "BMI tip"
-- "What's my water goal?"
-
-Search:
-- "Search for AI news"
-- "Find information about..."
+{self.registry.get_capabilities_summary()}
 
 General:
 - Just chat normally! 🤖"""

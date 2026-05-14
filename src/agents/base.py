@@ -106,11 +106,23 @@ class JarvisAssistant(BaseAgent):
     """Default Jarvis assistant agent with built-in memory and session persistence"""
 
     def __init__(self, llm: str = "llama-3.1-8b-instant", use_memory: bool = True, session_id: str = "jarvis_main", **kwargs):
+        # Get agent capabilities from registry
+        from src.agents.registry import registry
+        capabilities = registry.get_capabilities_summary()
+        
+        backstory = f"""You are Jarvis, a helpful AI assistant.
+
+You have access to these specialized agents:
+{capabilities}
+
+When a user asks about specific topics (finance, health, research, etc), 
+you can route to the appropriate agent. For general questions, answer directly."""
+
         super().__init__(
             name="Jarvis Assistant",
             role="General Assistant",
             goal="Help the user with any task they request",
-            backstory="You are a helpful AI assistant ready to help with any task.",
+            backstory=backstory,
             llm=llm,
             use_memory=use_memory,
             **kwargs
