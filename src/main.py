@@ -26,6 +26,7 @@ from src.agents.documentation.doc_agent import DocAgent
 from src.agents.registry import registry
 from src.memory import MemoryManager
 from src.user_profile import profile
+from src.mcp_tools import get_mcp_tools
 
 
 class Jarvis:
@@ -200,6 +201,63 @@ class Jarvis:
         # Health keywords
         elif any(k in msg_lower for k in ['health', 'weight', 'exercise', 'sleep', 'mood', 'bmi', 'water', 'symptom']):
             return self._handle_health(message)
+        
+        # === PATTERN DETECTION ===
+        # Pattern keywords
+        if any(k in msg_lower for k in ['parallel', 'simultaneously', 'at the same time']):
+            from src.agents.advanced.parallel_execution import ParallelAgents
+            return ParallelAgents().process(message)
+        
+        if any(k in msg_lower for k in ['loop', 'iterate', 'each item', 'for each']):
+            from src.agents.advanced.loop_iteration import LoopAgents
+            return LoopAgents().process(message)
+        
+        if any(k in msg_lower for k in ['async', 'background', 'fire and forget']):
+            from src.agents.advanced.async_tasks import AsyncAgents
+            return AsyncAgents().process(message)
+        
+        if any(k in msg_lower for k in ['reflect', 'review', 'improve', 'self-critique']):
+            from src.agents.advanced.self_reflection import SelfReflectingAgent
+            return SelfReflectingAgent().process(message)
+        
+        if any(k in msg_lower for k in ['structured', 'json', 'format as']):
+            from src.agents.advanced.structured_output import StructuredOutputAgent
+            return StructuredOutputAgent().process(message)
+        
+        if any(k in msg_lower for k in ['policy', 'rules', 'enforce', 'check policy']):
+            from src.agents.advanced.policy_engine import PolicyEngine
+            return PolicyEngine().process(message)
+        
+        # === MCP TOOL DETECTION ===
+        mcp_tools = get_mcp_tools()
+        
+        # Memory MCP
+        if any(k in msg_lower for k in ['remember this', 'store this', 'save to memory']):
+            return mcp_tools['memory'].set(msg_lower.split('remember')[1].split('to')[0].strip() if 'remember' in msg_lower else message, message)
+        
+        if any(k in msg_lower for k in ['what do you remember', 'show memories', 'list memory']):
+            return mcp_tools['memory'].list_keys()
+        
+        # Time MCP
+        if any(k in msg_lower for k in ['what time', 'current time', 'time in']):
+            tz = "UTC"
+            if 'in' in msg_lower:
+                tz = msg_lower.split('in')[-1].strip()
+            return mcp_tools['time'].now(tz)
+        
+        # GitHub MCP
+        if any(k in msg_lower for k in ['search github', 'find repo', 'github search']):
+            query = msg_lower.replace('search github', '').replace('find repo', '').replace('github search', '').strip()
+            return mcp_tools['github'].search_repos(query)
+        
+        # FileSystem MCP  
+        if msg_lower.strip().startswith('ls') or 'list files' in msg_lower or 'show directory' in msg_lower or 'show files' in msg_lower:
+            path = "."
+            if 'in' in msg_lower:
+                path = msg_lower.split('in')[-1].strip()
+            elif len(msg_lower.split()) > 1:
+                path = msg_lower.split(maxsplit=1)[1].strip()
+            return mcp_tools['filesystem'].list_dir(path)
         
         # Default to main assistant (with built-in PraisonAI memory + session)
         else:
