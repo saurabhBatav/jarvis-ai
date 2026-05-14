@@ -190,6 +190,7 @@ you can route to the appropriate agent. For general questions, answer directly."
         self.session_id = session_id
 
     def _create_praison_agent(self) -> PraisonAgent:
+        # Use PraisonAI session with persistent storage
         return PraisonAgent(
             name=self.name,
             instructions=self.instructions,
@@ -197,15 +198,18 @@ you can route to the appropriate agent. For general questions, answer directly."
             tools=self.tools if self.tools else None,
             allow_delegation=self.allow_delegation,
             allow_code_execution=self.allow_code_execution,
-            memory=True  # Enable PraisonAI's automatic memory
+            memory={  # Enable session persistence with PraisonAI
+                "session_id": self.session_id,
+                "user_id": "main_user",
+            }
         )
 
     def chat(self, message: str) -> str:
-        """Use PraisonAI agent with automatic memory"""
+        """Use PraisonAI agent with persistent session"""
         self.initialize()
         return self._agent.chat(message)
 
     def start(self, task: str) -> str:
-        """Use PraisonAI agent with automatic memory"""
+        """Use PraisonAI agent with persistent session"""
         self.initialize()
         return self._agent.start(task)
