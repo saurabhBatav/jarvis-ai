@@ -17,6 +17,7 @@ load_dotenv(env_path, override=True)  # override shell env vars
 from src.agents.base import JarvisAssistant
 from src.agents.domain import FinanceAgent, ResearchAgent, WorkLifeAgent, HealthAgent, SearchAgent
 from src.agents.domain.news_summary import NewsSummaryAgent
+from src.agents.documentation.doc_agent import DocAgent
 from src.agents.registry import registry
 from src.memory import MemoryManager
 
@@ -41,6 +42,7 @@ class Jarvis:
         self.health = HealthAgent()
         self.search = SearchAgent()
         self.news_summary = NewsSummaryAgent()
+        self.documentation = DocAgent()
         
         # Memory
         self.memory = MemoryManager()
@@ -74,6 +76,10 @@ class Jarvis:
         # News Summary keywords - BEFORE general news
         if any(k in msg_lower for k in ['news summary', 'news slides', 'create presentation', '10 slides', 'news presentation', 'summarize news']):
             return self._handle_news_summary(message)
+        
+        # Documentation Agent keywords
+        if any(k in msg_lower for k in ['documentation', 'doc', 'how to', 'example', 'help me build', 'create agent', 'show me code', 'reference']):
+            return self._handle_documentation(message)
         
         # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
         remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
@@ -231,6 +237,45 @@ class Jarvis:
             return f"📰 Generated 10-slide news summary for '{topic}':\n\n{content[:1500]}...\n\nSaved to: news_summary.md"
         except:
             return result
+    
+    def _handle_documentation(self, message: str) -> str:
+        """Handle documentation and code example requests"""
+        import re
+        msg_lower = message.lower()
+        
+        # Extract the topic from message
+        # Patterns: "help me build X", "show me example for X", "documentation for X"
+        patterns = [
+            r'(?:show me|help me|find|get)\s+(?:example\s+)?(?:for|about)?\s+(\w+)',
+            r'documentation\s+(?:for|about)?\s+(\w+)',
+            r'doc\s+(?:for|about)?\s+(\w+)',
+            r'how to\s+(\w+)',
+            r'reference\s+(?:for|about)?\s+(\w+)',
+        ]
+        
+        topic = "agent"  # default
+        for pattern in patterns:
+            match = re.search(pattern, msg_lower)
+            if match:
+                topic = match.group(1)
+                break
+        
+        # If no pattern matched, try last resort
+        if topic == "agent":
+            for word in ['agent', 'workflow', 'memory', 'mcp', 'serve', 'tool']:
+                if word in msg_lower:
+                    topic = word
+                    break
+        
+        # Run the documentation agent
+        try:
+            result = self.documentation.search_documentation(topic)
+            # Limit response length
+            if len(result) > 1500:
+                return f"📚 Documentation for '{topic}':\n\n{result[:1500]}...\n\nSee full result in docs or run again."
+            return f"📚 Documentation for '{topic}':\n\n{result}"
+        except Exception as e:
+            return f"Documentation Agent error: {str(e)}. Try: 'show me example for agent' or 'help me build workflow'"
     
     def _handle_search(self, message: str) -> str:
         # Check if it's a URL

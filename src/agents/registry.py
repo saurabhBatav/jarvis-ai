@@ -95,6 +95,19 @@ class AgentRegistry:
                 "Create markdown presentations"
             ]
         )
+        
+        # Documentation Agent
+        self.register_agent(
+            name="DocumentationAgent",
+            description="Search documentation and code examples for building agents/workflows",
+            keywords=["documentation", "doc", "how to", "example", "help me build", "create agent", "show me code", "reference", "code example", "implementation"],
+            handler_name="documentation",
+            capabilities=[
+                "Search PraisonAI docs",
+                "Find code examples from local examples folder",
+                "Reference agent/workflow implementations"
+            ]
+        )
     
     def register_agent(self, name: str, description: str, keywords: List[str], 
                        handler_name: str, capabilities: List[str]):
