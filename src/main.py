@@ -20,6 +20,7 @@ from src.agents.domain.news_summary import NewsSummaryAgent
 from src.agents.documentation.doc_agent import DocAgent
 from src.agents.registry import registry
 from src.memory import MemoryManager
+from src.user_profile import profile
 
 
 class Jarvis:
@@ -51,7 +52,12 @@ class Jarvis:
         # Agent Registry
         self.registry = registry
         
-        print("✅ Jarvis initialized and ready!")
+        # User Profile
+        self.profile = profile
+        self.profile.increment_conversation()
+        
+        # Personalized greeting
+        print(f"\n{self.profile.get_welcome_message()}")
         print(f"\n📋 Available Agents: {len(self.registry.get_all_agents())}")
         for name, info in self.registry.get_all_agents().items():
             print(f"  - {name}: {info['description'][:60]}...")
@@ -80,6 +86,22 @@ class Jarvis:
         # Documentation Agent keywords
         if any(k in msg_lower for k in ['documentation', 'doc', 'how to', 'example', 'help me build', 'create agent', 'show me code', 'reference']):
             return self._handle_documentation(message)
+        
+        # Personalization commands - more specific patterns first
+        if any(k in msg_lower for k in ['my name is', 'call me']):
+            return self._handle_set_name(message)
+        
+        if ' i am ' in msg_lower and 'interested' not in msg_lower:
+            return self._handle_set_name(message)
+        
+        if any(k in msg_lower for k in ['personality', 'be my', 'act as', 'behave']):
+            return self._handle_set_personality(message)
+        
+        if any(k in msg_lower for k in ['prefer', 'i like', 'i want', 'settings', 'configure']):
+            return self._handle_set_preferences(message)
+        
+        if 'profile' in msg_lower or 'about me' in msg_lower:
+            return self._handle_show_profile(message)
         
         # EXPLICIT REMEMBER COMMANDS - Route to custom LTM
         remember_patterns = ['remember', 'memorize', "don't forget", 'dont forget']
@@ -276,6 +298,103 @@ class Jarvis:
             return f"📚 Documentation for '{topic}':\n\n{result}"
         except Exception as e:
             return f"Documentation Agent error: {str(e)}. Try: 'show me example for agent' or 'help me build workflow'"
+    
+    def _handle_set_name(self, message: str) -> str:
+        """Handle setting user's name"""
+        import re
+        msg_lower = message.lower()
+        
+        patterns = [
+            r'my name is (\w+)',
+            r'call me (\w+)',
+        ]
+        
+        name = None
+        for pattern in patterns:
+            match = re.search(pattern, msg_lower)
+            if match:
+                name = match.group(1).capitalize()
+                break
+        
+        if not name:
+            return "What would you like me to call you?"
+        
+        self.profile.set_name(name)
+        return f"✅ Got it! I'll call you {name} from now on. Nice to meet you!"
+    
+    def _handle_set_personality(self, message: str) -> str:
+        """Handle personality mode changes"""
+        msg_lower = message.lower()
+        
+        if 'friend' in msg_lower or 'friendly' in msg_lower:
+            self.profile.set_personality_mode("friend")
+            return "😊 Got it! I'll be your friendly companion from now on."
+        elif 'teacher' in msg_lower or 'tutor' in msg_lower:
+            self.profile.set_personality_mode("teacher")
+            return "📚 Got it! I'll be your patient teacher from now on."
+        elif 'professional' in msg_lower or 'assistant' in msg_lower:
+            self.profile.set_personality_mode("assistant")
+            return "💼 Got it! I'll be your professional assistant from now on."
+        elif 'companion' in msg_lower:
+            self.profile.set_personality_mode("companion")
+            return "🤝 Got it! I'll be your companion from now on."
+        else:
+            return "I can be: Assistant (professional), Companion (friendly), Teacher (educational), or Friend (casual). Which would you like?"
+    
+    def _handle_set_preferences(self, message: str) -> str:
+        """Handle user preference settings"""
+        msg_lower = message.lower()
+        
+        # Communication style
+        if 'brief' in msg_lower or 'short' in msg_lower:
+            self.profile.set_preference("response_length", "short")
+            return "✅ I'll give you brief, concise responses."
+        elif 'detailed' in msg_lower or 'long' in msg_lower:
+            self.profile.set_preference("response_length", "long")
+            return "✅ I'll give you detailed responses with more information."
+        elif 'balanced' in msg_lower:
+            self.profile.set_preference("response_length", "medium")
+            return "✅ I'll balance between brief and detailed."
+        
+        # Formality
+        if 'formal' in msg_lower:
+            self.profile.set_preference("formality", "formal")
+            return "✅ I'll be more formal in my responses."
+        elif 'casual' in msg_lower:
+            self.profile.set_preference("formality", "casual")
+            return "✅ I'll be more casual and friendly."
+        
+        # Interests
+        if 'interested in' in msg_lower or 'like' in msg_lower:
+            # Extract topic
+            for word in ['interested in', 'like', 'love', 'enjoy']:
+                if word in msg_lower:
+                    topic = msg_lower.split(word)[-1].strip().strip('.')
+                    if topic:
+                        self.profile.add_interest(topic)
+                        return f"✅ Added '{topic}' to your interests!"
+        
+        return "I understand preferences like: brief/detailed responses, formal/casual style. Say 'I'm interested in [topic]' to add interests."
+    
+    def _handle_show_profile(self, message: str) -> str:
+        """Show user profile"""
+        name = self.profile.get_name()
+        mode = self.profile.get_preference("personality_mode", "assistant")
+        style = self.profile.get_preference("response_length", "medium")
+        interests = self.profile.profile.get("interests", [])
+        conv_count = self.profile.profile.get("conversation_count", 0)
+        
+        return f"""👤 Your Jarvis Profile:
+
+📛 Name: {name}
+🤖 Personality: {mode}
+📝 Response style: {style}
+💬 Conversations: {conv_count}
+⭐ Interests: {', '.join(interests) if interests else 'None yet'}
+
+Say 'my name is [Name]' to change your name.
+Say 'be my friend' to change personality.
+Say 'prefer brief responses' to adjust style."""
     
     def _handle_search(self, message: str) -> str:
         # Check if it's a URL
@@ -479,6 +598,13 @@ class Jarvis:
         return f"""🎯 Jarvis Commands:
 
 {self.registry.get_capabilities_summary()}
+
+Personalization:
+- "My name is [Name]" - Set your name
+- "Be my friend/teacher/assistant" - Change personality
+- "I prefer brief/detailed responses" - Adjust style
+- "I'm interested in [topic]" - Add interests
+- "Profile" or "About me" - View your profile
 
 General:
 - Just chat normally! 🤖"""
