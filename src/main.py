@@ -335,19 +335,15 @@ class Jarvis:
             if self.profile.is_jarvis_mode():
                 logger.thinking("Using JARVIS personality")
 
-            # Build context
-            memory_info = ""
+            # Build context with memory
+            memory_context = ""
             if relevant_memories:
-                memory_info = f" Known: {relevant_memories[0][:60]}"
-
-            system_prefix = f"""J.A.R.V.I.S. - Reply as Tony Stark's AI. Formal, brief, add "sir". {memory_info}
-
-User: {message[:200]}
-"""
-
+                memory_context = "\n\nRelevant information from memory:\n" + "\n".join(f"- {mem}" for mem in relevant_memories)
+            
+            # Pass to PraisonAI agent which has built-in memory
+            logger.step("Calling Jarvis with memory...")
             start_time = time.time()
-            logger.step("Calling LLM...")
-            response = self.assistant.start(system_prefix)
+            response = self.assistant.chat(f"{message}{memory_context}")
             elapsed = time.time() - start_time
 
             logger.success(f"Response generated in {elapsed:.2f}s")
@@ -804,43 +800,37 @@ Make it engaging, professional, and ready to post.""", max_tokens=2000)
                 self.memory.add_entity(entity, entity_type, {'source': 'chat'})
 
     def _store_to_ltm(self, message: str, response: str) -> None:
+        """
+        Store to LTM - But PraisonAI handles conversation memory automatically.
+        This is for custom semantic search and specific patterns only.
+        
+        Note: Don't over-store. Let PraisonAI handle conversation history.
+        Only store explicit user preferences or important facts.
+        """
         msg_lower = message.lower()
         
-        # Skip questions - don't store queries
-        if msg_lower.startswith('what') or msg_lower.startswith('how') or msg_lower.startswith('where') or msg_lower.startswith('when') or msg_lower.startswith('who') or msg_lower.startswith('do ') or msg_lower.startswith('can '):
+        # Skip questions
+        if msg_lower.startswith(('what', 'how', 'where', 'when', 'who', 'do ', 'can ', 'should ', 'is ')):
             return
         
-        # Explicit memory commands (handle typos too)
-        if any(k in msg_lower for k in ['remember', 'remeber', 'rember', 'memorize', 'memorise', 'dont forget', "don't forget", 'store this', 'keep in mind']):
-            # Extract the memory content
-            remember_text = message
-            for word in ['remember', 'remeber', 'rember', 'memorize', 'memorise', 'dont forget', "don't forget", 'store this', 'keep in mind']:
-                if word in msg_lower:
-                    remember_text = msg_lower.split(word, 1)[-1].strip()
-                    break
-            if remember_text and len(remember_text) > 2:
-                enriched_text = f"User memory: {remember_text}"
-                logger.step(f"Storing to LTM: '{remember_text[:50]}...'")
-                self.memory.add_to_memory(enriched_text, metadata={'type': 'explicit_memory', 'source': 'chat'})
-                return
+        # Only store if user explicitly states a preference or fact
+        # Let PraisonAI handle conversation memory naturally
+        explicit_patterns = [
+            'my name is',
+            'call me',
+            'i am from',
+            'i live in',
+            'i work at',
+            'i work for',
+            'my favorite is',
+            'i prefer',
+            'remember this',
+            'note that',
+            'keep in mind'
+        ]
         
-        # Preference patterns
-        preference_patterns = ['i like', 'i prefer', 'i love', 'i hate', 'my favorite', 'fav movie', 'fav food', 'fav color']
-        if any(k in msg_lower for k in preference_patterns):
-            if '?' not in message and 'what' not in msg_lower[:10]:
-                self.memory.add_to_memory(f"User preference: {message}", metadata={'type': 'preference', 'source': 'chat'})
-                logger.step(f"Storing preference: '{message[:50]}...'")
-                return
-        
-        # Finance queries
-        if 'portfolio' in msg_lower or 'holdings' in msg_lower:
-            self.memory.add_to_memory(f"Finance query: {response[:200]}", metadata={'type': 'finance', 'source': 'chat'})
-            return
-        
-        # Research queries
-        if any(k in msg_lower for k in ['research', 'learn', 'understand']):
-            self.memory.add_to_memory(f"Research topic: {message}", metadata={'type': 'research', 'source': 'chat'})
-            return
+        if any(k in msg_lower for k in explicit_patterns):
+            self.memory.add_to_memory(f"User fact: {message}", metadata={'type': 'explicit', 'source': 'chat'})
 
     def help(self) -> str:
         return f"""🎯 Jarvis Commands:

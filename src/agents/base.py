@@ -159,7 +159,18 @@ class JarvisAssistant(BaseAgent):
         from src.agents.registry import registry
         capabilities = registry.get_capabilities_summary()
         
+        # Dynamic memory instructions - not hardcoded keywords
+        memory_instruction = """
+MEMORY SYSTEM: You have automatic conversation memory. Store important information naturally:
+- When user shares preferences, facts, or personal details → remember them
+- When user mentions likes/dislikes → remember them
+- When user says something important → remember it
+- You DON'T need explicit "remember" commands - memory is automatic
+
+Your memory is persistent across conversations. Access relevant memories when needed."""
+        
         backstory = f"""You are Jarvis, a helpful AI assistant.
+{memory_instruction}
 
 You have access to these specialized agents:
 {capabilities}
@@ -186,17 +197,15 @@ you can route to the appropriate agent. For general questions, answer directly."
             tools=self.tools if self.tools else None,
             allow_delegation=self.allow_delegation,
             allow_code_execution=self.allow_code_execution,
-            memory={
-                "session_id": self.session_id,
-                "user_id": "main_user",
-                "auto_memory": True
-            }
+            memory=True  # Enable PraisonAI's automatic memory
         )
 
     def chat(self, message: str) -> str:
-        """Use direct API call instead of PraisonAI"""
-        return call_llm(f"{self.instructions}\n\nUser: {message}", max_tokens=500)
+        """Use PraisonAI agent with automatic memory"""
+        self.initialize()
+        return self._agent.chat(message)
 
     def start(self, task: str) -> str:
-        """Use direct API call instead of PraisonAI"""
-        return call_llm(f"{self.instructions}\n\nTask: {task}", max_tokens=500)
+        """Use PraisonAI agent with automatic memory"""
+        self.initialize()
+        return self._agent.start(task)
